@@ -10,12 +10,14 @@ import com.voiceinput.pro.model.dto.TaskDetailResponse;
 import com.voiceinput.pro.model.dto.TaskSummaryResponse;
 import com.voiceinput.pro.model.enums.SceneType;
 import com.voiceinput.pro.model.enums.TaskStatus;
-import com.voiceinput.pro.service.TaskService;
 import com.voiceinput.pro.service.ProofreadService;
+import com.voiceinput.pro.service.TaskService;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -97,7 +99,14 @@ public class TaskController {
     public ResponseEntity<ByteArrayResource> exportMarkdown(@PathVariable String id) {
         TaskService.MarkdownExportResult result = taskService.exportMarkdown(id);
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + result.fileName() + "\"")
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.attachment()
+                    .filename(result.fileName(), StandardCharsets.UTF_8)
+                    .build()
+                    .toString()
+            )
+            .contentLength(result.content().length)
             .contentType(MediaType.parseMediaType("text/markdown; charset=utf-8"))
             .body(new ByteArrayResource(result.content()));
     }

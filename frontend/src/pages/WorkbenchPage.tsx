@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../components/ToastProvider";
 import { prepareAudioUpload } from "../services/audio";
 import { createExport, createTask, createTextTask, getExportDownloadUrl, getMarkdownDownloadUrl, getTaskDetail, getTemplates, reoptimizeTask, saveProofread, saveTaskToHistory, uploadAudio } from "../services/api";
+import { downloadFileFromUrl } from "../services/download";
 import {
   buildRecordingFile,
   cleanLiveTranscript,
@@ -419,10 +420,7 @@ export function WorkbenchPage() {
         exportType,
         contentSource: task.proofreadRevisionId ? "PROOFREAD" : "MODEL"
       });
-      const link = document.createElement("a");
-      link.href = getExportDownloadUrl(record.id);
-      link.download = record.fileName;
-      link.click();
+      await downloadFileFromUrl(getExportDownloadUrl(record.id), record.fileName);
       toast.success("导出已生成", `${record.fileName} 已写入导出中心`);
     } catch (error) {
       console.error(error);

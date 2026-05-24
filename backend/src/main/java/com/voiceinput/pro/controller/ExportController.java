@@ -4,9 +4,11 @@ import com.voiceinput.pro.model.dto.CreateExportRequest;
 import com.voiceinput.pro.model.dto.ExportRecordResponse;
 import com.voiceinput.pro.service.ExportService;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -39,7 +41,14 @@ public class ExportController {
     public ResponseEntity<ByteArrayResource> download(@PathVariable String id) {
         ExportService.ExportDownload download = exportService.download(id);
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + download.fileName() + "\"")
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                ContentDisposition.attachment()
+                    .filename(download.fileName(), StandardCharsets.UTF_8)
+                    .build()
+                    .toString()
+            )
+            .contentLength(download.bytes().length)
             .contentType(MediaType.parseMediaType(download.contentType()))
             .body(new ByteArrayResource(download.bytes()));
     }

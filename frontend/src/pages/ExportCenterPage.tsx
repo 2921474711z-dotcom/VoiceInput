@@ -2,6 +2,7 @@ import { Download, FileArchive, FileJson, FileText, RefreshCcw } from "lucide-re
 import { useEffect, useState } from "react";
 import { useToast } from "../components/ToastProvider";
 import { getExportDownloadUrl, getExports } from "../services/api";
+import { downloadFileFromUrl } from "../services/download";
 import type { ExportRecordResponse, ExportType } from "../types/api";
 
 const exportTypes: Array<{ label: string; value?: ExportType }> = [
@@ -41,11 +42,13 @@ export function ExportCenterPage() {
     load();
   }, [exportType]);
 
-  function download(record: ExportRecordResponse) {
-    const link = document.createElement("a");
-    link.href = getExportDownloadUrl(record.id);
-    link.download = record.fileName;
-    link.click();
+  async function download(record: ExportRecordResponse) {
+    try {
+      await downloadFileFromUrl(getExportDownloadUrl(record.id), record.fileName);
+    } catch (error) {
+      console.error(error);
+      toast.error("下载失败", error instanceof Error ? error.message : "请稍后重试");
+    }
   }
 
   function formatBytes(value?: number) {

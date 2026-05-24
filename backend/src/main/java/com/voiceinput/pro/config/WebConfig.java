@@ -18,7 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
             .allowedOrigins(appProperties.getFrontendUrl())
             .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-            .allowedHeaders("*");
+            .allowedHeaders("*")
+            .exposedHeaders("Content-Disposition", "Content-Length", "Content-Type");
     }
 }
-
