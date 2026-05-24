@@ -1,6 +1,7 @@
 import type {
   AppConfigRequest,
   AppConfigResponse,
+  ConfigTemplateRequest,
   ConfigTemplateResponse,
   HistoryPageResponse,
   HotwordCategoryResponse,
@@ -46,6 +47,14 @@ export async function createTask(uploadId: string, sceneType: SceneType, templat
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ uploadId, sceneType, templateId })
+  });
+}
+
+export async function createTextTask(uploadId: string | undefined, sceneType: SceneType, templateId: string, rawText: string) {
+  return request<TaskSummaryResponse>("/tasks/process-text", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ uploadId, sceneType, templateId, rawText })
   });
 }
 
@@ -159,6 +168,14 @@ export async function getTemplates() {
 export async function createTemplate(payload: unknown) {
   return request<ConfigTemplateResponse>("/config/templates", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateTemplate(id: string, payload: ConfigTemplateRequest) {
+  return request<ConfigTemplateResponse>(`/config/templates/${id}`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });

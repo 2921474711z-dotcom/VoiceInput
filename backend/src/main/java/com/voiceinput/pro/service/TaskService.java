@@ -2,6 +2,7 @@ package com.voiceinput.pro.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.voiceinput.pro.model.dto.CreateTaskRequest;
+import com.voiceinput.pro.model.dto.CreateTextTaskRequest;
 import com.voiceinput.pro.model.dto.HistoryPageResponse;
 import com.voiceinput.pro.model.dto.HotwordMatchResponse;
 import com.voiceinput.pro.model.dto.ReoptimizeTaskRequest;
@@ -51,6 +52,31 @@ public class TaskService {
         task.setTemplateId(template.templateId());
         task.setTemplateName(template.templateName());
         task.setVersionIndex(1);
+        task.setSavedToHistory(false);
+        task.setModelConfigSnapshot(jsonSupport.toJson(template.config()));
+
+        ProcessingTaskEntity saved = processingTaskRepository.save(task);
+        taskQueueService.enqueue(saved.getId());
+        return toSummary(saved);
+    }
+
+    @Transactional
+    public TaskSummaryResponse createFromText(CreateTextTaskRequest request) {
+        ConfigService.TemplateResolution template = configService.resolveTaskTemplate(request.templateId());
+        UploadedAssetEntity asset = null;
+        if (request.uploadId() != null && !request.uploadId().isBlank()) {
+            asset = storageService.getAsset(request.uploadId());
+        }
+
+        ProcessingTaskEntity task = new ProcessingTaskEntity();
+        task.setUploadId(asset == null ? null : asset.getId());
+        task.setSceneType(request.sceneType());
+        task.setStatus(TaskStatus.PENDING);
+        task.setFileName(asset == null ? "实时说话" : asset.getOriginalFileName());
+        task.setTemplateId(template.templateId());
+        task.setTemplateName(template.templateName());
+        task.setVersionIndex(1);
+        task.setRawText(TextSupport.normalizeWhitespace(request.rawText()));
         task.setSavedToHistory(false);
         task.setModelConfigSnapshot(jsonSupport.toJson(template.config()));
 

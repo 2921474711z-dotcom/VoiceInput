@@ -14,6 +14,7 @@ import com.voiceinput.pro.support.JsonSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,27 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConfigService {
 
     private static final String ACTIVE_CONFIG_ID = "active";
+    private static final String DEFAULT_RECOGNITION_MODEL = "通用语音识别 v3";
+    private static final String DEFAULT_LANGUAGE_TYPE = "中文（普通话）";
+    private static final String DEFAULT_DOMAIN_MODEL = "通用领域";
+    private static final String DEFAULT_OUTPUT_FORMAT = "纯文本";
+    private static final String DEFAULT_STABILITY_MODE = "平衡";
+    private static final String DEFAULT_OPTIMIZATION_MODEL = "文本优化增强 v2";
+    private static final String DEFAULT_OPTIMIZATION_GOAL = "会议纪要优化";
+    private static final String DEFAULT_TONE_STYLE = "专业客观";
+    private static final String DEFAULT_LENGTH_PREFERENCE = "适中";
+    private static final String DEFAULT_COST_MODE = "成本优先";
+
+    private static final Set<String> RECOGNITION_MODELS = Set.of("通用语音识别 v3", "快速语音识别 v3", "高精度语音识别 v3");
+    private static final Set<String> LANGUAGE_TYPES = Set.of("中文（普通话）", "中英混合", "英文");
+    private static final Set<String> DOMAIN_MODELS = Set.of("通用领域", "会议场景", "技术表达", "客服沟通");
+    private static final Set<String> OUTPUT_FORMATS = Set.of("纯文本", "结构化文本", "Markdown");
+    private static final Set<String> STABILITY_MODES = Set.of("更快", "平衡", "更准确");
+    private static final Set<String> OPTIMIZATION_MODELS = Set.of("文本优化增强 v2", "结构化整理 v2", "正式表达增强 v2");
+    private static final Set<String> OPTIMIZATION_GOALS = Set.of("会议纪要优化", "工作汇报优化", "正式表达优化", "Markdown 笔记优化", "代码注释优化", "聊天回复优化");
+    private static final Set<String> TONE_STYLES = Set.of("专业客观", "简洁直接", "正式严谨", "自然友好");
+    private static final Set<String> LENGTH_PREFERENCES = Set.of("精简", "适中", "详细");
+    private static final Set<String> COST_MODES = Set.of("成本优先", "质量优先");
 
     private final AppConfigRepository appConfigRepository;
     private final ConfigTemplateRepository configTemplateRepository;
@@ -49,17 +71,17 @@ public class ConfigService {
     @Transactional
     public AppConfigResponse resetToDefault() {
         AppConfigEntity entity = getActiveEntity();
-        entity.setRecognitionModel("通用语音识别 v3");
-        entity.setLanguageType("中文（普通话）");
-        entity.setDomainModel("通用领域");
-        entity.setOutputFormat("纯文本");
-        entity.setStabilityMode("平衡");
-        entity.setOptimizationModel("文本优化增强 v2");
-        entity.setOptimizationGoal("会议纪要优化");
-        entity.setToneStyle("专业客观");
-        entity.setLengthPreference("适中");
+        entity.setRecognitionModel(DEFAULT_RECOGNITION_MODEL);
+        entity.setLanguageType(DEFAULT_LANGUAGE_TYPE);
+        entity.setDomainModel(DEFAULT_DOMAIN_MODEL);
+        entity.setOutputFormat(DEFAULT_OUTPUT_FORMAT);
+        entity.setStabilityMode(DEFAULT_STABILITY_MODE);
+        entity.setOptimizationModel(DEFAULT_OPTIMIZATION_MODEL);
+        entity.setOptimizationGoal(DEFAULT_OPTIMIZATION_GOAL);
+        entity.setToneStyle(DEFAULT_TONE_STYLE);
+        entity.setLengthPreference(DEFAULT_LENGTH_PREFERENCE);
         entity.setHotwordEnabled(true);
-        entity.setCostMode("成本优先");
+        entity.setCostMode(DEFAULT_COST_MODE);
         entity.setAsrModelRoute(defaultAsrModel());
         entity.setLlmModelRoute(defaultLlmModel());
         return toResponse(appConfigRepository.save(entity));
@@ -85,6 +107,34 @@ public class ConfigService {
             setDefaultTemplate(saved.getId());
             saved.setIsDefaultTemplate(true);
         }
+        return toTemplateResponse(saved);
+    }
+
+    @Transactional
+    public ConfigTemplateResponse updateTemplate(String templateId, ConfigTemplateRequest request) {
+        ConfigTemplateEntity entity = getTemplateEntity(templateId);
+        boolean wasDefaultTemplate = Boolean.TRUE.equals(entity.getIsDefaultTemplate());
+
+        entity.setName(request.name());
+        entity.setDescription(request.description());
+        copy(request.config(), entity);
+        entity.setIsDefaultTemplate(false);
+        ConfigTemplateEntity saved = configTemplateRepository.save(entity);
+
+        if (Boolean.TRUE.equals(request.defaultTemplate())) {
+            setDefaultTemplate(saved.getId());
+            saved.setIsDefaultTemplate(true);
+            return toTemplateResponse(saved);
+        }
+
+        if (wasDefaultTemplate) {
+            AppConfigEntity active = getActiveEntity();
+            if (templateId.equals(active.getDefaultTemplateId())) {
+                active.setDefaultTemplateId(null);
+                appConfigRepository.save(active);
+            }
+        }
+
         return toTemplateResponse(saved);
     }
 
@@ -191,17 +241,17 @@ public class ConfigService {
         }
 
         return new AppConfigResponse(
-            entity.getRecognitionModel(),
-            entity.getLanguageType(),
-            entity.getDomainModel(),
-            entity.getOutputFormat(),
-            entity.getStabilityMode(),
-            entity.getOptimizationModel(),
-            entity.getOptimizationGoal(),
-            entity.getToneStyle(),
-            entity.getLengthPreference(),
+            normalizeConfigValue(entity.getRecognitionModel(), DEFAULT_RECOGNITION_MODEL, RECOGNITION_MODELS),
+            normalizeConfigValue(entity.getLanguageType(), DEFAULT_LANGUAGE_TYPE, LANGUAGE_TYPES),
+            normalizeConfigValue(entity.getDomainModel(), DEFAULT_DOMAIN_MODEL, DOMAIN_MODELS),
+            normalizeConfigValue(entity.getOutputFormat(), DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS),
+            normalizeConfigValue(entity.getStabilityMode(), DEFAULT_STABILITY_MODE, STABILITY_MODES),
+            normalizeConfigValue(entity.getOptimizationModel(), DEFAULT_OPTIMIZATION_MODEL, OPTIMIZATION_MODELS),
+            normalizeConfigValue(entity.getOptimizationGoal(), DEFAULT_OPTIMIZATION_GOAL, OPTIMIZATION_GOALS),
+            normalizeConfigValue(entity.getToneStyle(), DEFAULT_TONE_STYLE, TONE_STYLES),
+            normalizeConfigValue(entity.getLengthPreference(), DEFAULT_LENGTH_PREFERENCE, LENGTH_PREFERENCES),
             entity.getHotwordEnabled(),
-            entity.getCostMode(),
+            normalizeConfigValue(entity.getCostMode(), DEFAULT_COST_MODE, COST_MODES),
             entity.getAsrModelRoute(),
             entity.getLlmModelRoute(),
             appProperties.getAsr().getProvider(),
@@ -232,17 +282,17 @@ public class ConfigService {
 
     private AppConfigRequest toRequest(ConfigTemplateEntity entity) {
         return new AppConfigRequest(
-            entity.getRecognitionModel(),
-            entity.getLanguageType(),
-            entity.getDomainModel(),
-            entity.getOutputFormat(),
-            entity.getStabilityMode(),
-            entity.getOptimizationModel(),
-            entity.getOptimizationGoal(),
-            entity.getToneStyle(),
-            entity.getLengthPreference(),
+            normalizeConfigValue(entity.getRecognitionModel(), DEFAULT_RECOGNITION_MODEL, RECOGNITION_MODELS),
+            normalizeConfigValue(entity.getLanguageType(), DEFAULT_LANGUAGE_TYPE, LANGUAGE_TYPES),
+            normalizeConfigValue(entity.getDomainModel(), DEFAULT_DOMAIN_MODEL, DOMAIN_MODELS),
+            normalizeConfigValue(entity.getOutputFormat(), DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS),
+            normalizeConfigValue(entity.getStabilityMode(), DEFAULT_STABILITY_MODE, STABILITY_MODES),
+            normalizeConfigValue(entity.getOptimizationModel(), DEFAULT_OPTIMIZATION_MODEL, OPTIMIZATION_MODELS),
+            normalizeConfigValue(entity.getOptimizationGoal(), DEFAULT_OPTIMIZATION_GOAL, OPTIMIZATION_GOALS),
+            normalizeConfigValue(entity.getToneStyle(), DEFAULT_TONE_STYLE, TONE_STYLES),
+            normalizeConfigValue(entity.getLengthPreference(), DEFAULT_LENGTH_PREFERENCE, LENGTH_PREFERENCES),
             entity.getHotwordEnabled(),
-            entity.getCostMode(),
+            normalizeConfigValue(entity.getCostMode(), DEFAULT_COST_MODE, COST_MODES),
             entity.getAsrModelRoute(),
             entity.getLlmModelRoute()
         );
@@ -250,17 +300,17 @@ public class ConfigService {
 
     private AppConfigRequest toRequest(AppConfigEntity entity) {
         return new AppConfigRequest(
-            entity.getRecognitionModel(),
-            entity.getLanguageType(),
-            entity.getDomainModel(),
-            entity.getOutputFormat(),
-            entity.getStabilityMode(),
-            entity.getOptimizationModel(),
-            entity.getOptimizationGoal(),
-            entity.getToneStyle(),
-            entity.getLengthPreference(),
+            normalizeConfigValue(entity.getRecognitionModel(), DEFAULT_RECOGNITION_MODEL, RECOGNITION_MODELS),
+            normalizeConfigValue(entity.getLanguageType(), DEFAULT_LANGUAGE_TYPE, LANGUAGE_TYPES),
+            normalizeConfigValue(entity.getDomainModel(), DEFAULT_DOMAIN_MODEL, DOMAIN_MODELS),
+            normalizeConfigValue(entity.getOutputFormat(), DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS),
+            normalizeConfigValue(entity.getStabilityMode(), DEFAULT_STABILITY_MODE, STABILITY_MODES),
+            normalizeConfigValue(entity.getOptimizationModel(), DEFAULT_OPTIMIZATION_MODEL, OPTIMIZATION_MODELS),
+            normalizeConfigValue(entity.getOptimizationGoal(), DEFAULT_OPTIMIZATION_GOAL, OPTIMIZATION_GOALS),
+            normalizeConfigValue(entity.getToneStyle(), DEFAULT_TONE_STYLE, TONE_STYLES),
+            normalizeConfigValue(entity.getLengthPreference(), DEFAULT_LENGTH_PREFERENCE, LENGTH_PREFERENCES),
             entity.getHotwordEnabled(),
-            entity.getCostMode(),
+            normalizeConfigValue(entity.getCostMode(), DEFAULT_COST_MODE, COST_MODES),
             entity.getAsrModelRoute(),
             entity.getLlmModelRoute()
         );
@@ -331,6 +381,13 @@ public class ConfigService {
         return appProperties.getLlm().getModel() == null || appProperties.getLlm().getModel().isBlank()
             ? "mimo-v2.5-pro"
             : appProperties.getLlm().getModel();
+    }
+
+    private String normalizeConfigValue(String value, String fallback, Set<String> allowedValues) {
+        if (value == null || value.isBlank() || value.contains("?") || !allowedValues.contains(value)) {
+            return fallback;
+        }
+        return value;
     }
 
     public record TemplateResolution(

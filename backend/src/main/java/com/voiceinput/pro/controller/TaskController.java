@@ -1,6 +1,7 @@
 package com.voiceinput.pro.controller;
 
 import com.voiceinput.pro.model.dto.CreateTaskRequest;
+import com.voiceinput.pro.model.dto.CreateTextTaskRequest;
 import com.voiceinput.pro.model.dto.HistoryPageResponse;
 import com.voiceinput.pro.model.dto.ReoptimizeTaskRequest;
 import com.voiceinput.pro.model.dto.TaskDetailResponse;
@@ -34,6 +35,11 @@ public class TaskController {
     @PostMapping("/tasks/process")
     public TaskSummaryResponse createTask(@Valid @RequestBody CreateTaskRequest request) {
         return taskService.create(request);
+    }
+
+    @PostMapping("/tasks/process-text")
+    public TaskSummaryResponse createTextTask(@Valid @RequestBody CreateTextTaskRequest request) {
+        return taskService.createFromText(request);
     }
 
     @GetMapping("/tasks/{id}")

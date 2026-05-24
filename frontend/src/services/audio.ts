@@ -104,9 +104,11 @@ function needsNormalization(file: File) {
   }
 
   return normalizedType.includes("m4a")
+    || normalizedType.includes("webm")
     || normalizedType.includes("mp4")
     || normalizedType.includes("aac")
     || normalizedType.includes("x-m4a")
+    || normalizedName.endsWith(".webm")
     || normalizedName.endsWith(".m4a")
     || normalizedName.endsWith(".mp4")
     || normalizedName.endsWith(".aac");

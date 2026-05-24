@@ -141,6 +141,13 @@ export interface AppConfigResponse extends AppConfigRequest {
   defaultTemplateName?: string;
 }
 
+export interface ConfigTemplateRequest {
+  name: string;
+  description?: string;
+  defaultTemplate: boolean;
+  config: AppConfigRequest;
+}
+
 export interface ConfigTemplateResponse {
   id: string;
   name: string;

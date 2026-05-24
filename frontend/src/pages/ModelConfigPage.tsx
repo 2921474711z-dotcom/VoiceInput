@@ -9,11 +9,14 @@ import {
   getUsageStats,
   resetConfig,
   setDefaultTemplate,
+  updateTemplate,
   updateConfig
 } from "../services/api";
-import type { AppConfigRequest, AppConfigResponse, ConfigTemplateResponse, SceneType, UsageStatsResponse } from "../types/api";
+import type { AppConfigRequest, AppConfigResponse, ConfigTemplateRequest, ConfigTemplateResponse, SceneType, UsageStatsResponse } from "../types/api";
 
-const templateSeed = { name: "", description: "", defaultTemplate: false };
+function createTemplateSeed() {
+  return { name: "", description: "", defaultTemplate: false };
+}
 
 const recognitionModelOptions = ["通用语音识别 v3", "快速语音识别 v3", "高精度语音识别 v3"];
 const languageOptions = ["中文（普通话）", "中英混合", "英文"];
@@ -75,6 +78,16 @@ function buildConfigSummary(config: AppConfigRequest) {
   ];
 }
 
+function buildTemplateHeadline(config: AppConfigRequest) {
+  return [
+    `ASR ${config.asrModelRoute}`,
+    `LLM ${config.llmModelRoute}`,
+    config.languageType,
+    config.optimizationGoal,
+    config.hotwordEnabled ? "热词启用" : "热词停用"
+  ].join(" / ");
+}
+
 function toConfigPayload(config: AppConfigResponse): AppConfigRequest {
   return {
     recognitionModel: config.recognitionModel,
@@ -93,26 +106,141 @@ function toConfigPayload(config: AppConfigResponse): AppConfigRequest {
   };
 }
 
+function TemplateConfigEditor({
+  config,
+  onChange
+}: {
+  config: AppConfigRequest;
+  onChange: (next: AppConfigRequest) => void;
+}) {
+  return (
+    <div className="config-sections">
+      <div className="panel">
+        <h4 className="panel-title">模板识别策略</h4>
+        <div className="form-grid">
+          <label>
+            ASR 模型
+            <select className="select-input" value={config.asrModelRoute} onChange={(e) => onChange({ ...config, asrModelRoute: e.target.value })}>
+              {asrRouteOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            LLM 模型
+            <select className="select-input" value={config.llmModelRoute} onChange={(e) => onChange({ ...config, llmModelRoute: e.target.value })}>
+              {llmRouteOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            识别策略
+            <select className="select-input" value={config.recognitionModel} onChange={(e) => onChange({ ...config, recognitionModel: e.target.value })}>
+              {recognitionModelOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            语言类型
+            <select className="select-input" value={config.languageType} onChange={(e) => onChange({ ...config, languageType: e.target.value })}>
+              {languageOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            领域模型
+            <select className="select-input" value={config.domainModel} onChange={(e) => onChange({ ...config, domainModel: e.target.value })}>
+              {domainOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            输出格式
+            <select className="select-input" value={config.outputFormat} onChange={(e) => onChange({ ...config, outputFormat: e.target.value })}>
+              {outputFormatOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            稳定性
+            <select className="select-input" value={config.stabilityMode} onChange={(e) => onChange({ ...config, stabilityMode: e.target.value })}>
+              {stabilityOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h4 className="panel-title">模板优化策略</h4>
+        <div className="form-grid">
+          <label>
+            优化模型
+            <select className="select-input" value={config.optimizationModel} onChange={(e) => onChange({ ...config, optimizationModel: e.target.value })}>
+              {optimizationModelOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            优化目标
+            <select className="select-input" value={config.optimizationGoal} onChange={(e) => onChange({ ...config, optimizationGoal: e.target.value })}>
+              {optimizationGoalOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            语气风格
+            <select className="select-input" value={config.toneStyle} onChange={(e) => onChange({ ...config, toneStyle: e.target.value })}>
+              {toneOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            长度偏好
+            <select className="select-input" value={config.lengthPreference} onChange={(e) => onChange({ ...config, lengthPreference: e.target.value })}>
+              {lengthOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            成本模式
+            <select className="select-input" value={config.costMode} onChange={(e) => onChange({ ...config, costMode: e.target.value })}>
+              {costModeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="toggle-row">
+          <span>模板启用热词修正</span>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={config.hotwordEnabled} onChange={(e) => onChange({ ...config, hotwordEnabled: e.target.checked })} />
+            <span>{config.hotwordEnabled ? "启用" : "停用"}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ModelConfigPage() {
   const toast = useToast();
   const [tab, setTab] = useState<"config" | "templates" | "stats">("config");
   const [config, setConfig] = useState<AppConfigResponse | null>(null);
   const [templates, setTemplates] = useState<ConfigTemplateResponse[]>([]);
   const [stats, setStats] = useState<UsageStatsResponse | null>(null);
-  const [templateForm, setTemplateForm] = useState(templateSeed);
+  const [templateForm, setTemplateForm] = useState(createTemplateSeed);
+  const [templateConfig, setTemplateConfig] = useState<AppConfigRequest | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
   const [statsSceneType, setStatsSceneType] = useState("");
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
 
-  async function loadAll() {
+  function resetTemplateEditor(baseConfig: AppConfigRequest) {
+    setTemplateForm(createTemplateSeed());
+    setTemplateConfig(baseConfig);
+    setEditingTemplateId(null);
+  }
+
+  async function loadAll(resetEditor = false) {
     const [configData, templateData, statsData] = await Promise.all([getConfig(), getTemplates(), getUsageStats({})]);
     setConfig(configData);
     setTemplates(templateData);
     setStats(statsData);
+    if (resetEditor || templateConfig == null) {
+      resetTemplateEditor(toConfigPayload(configData));
+    }
   }
 
   useEffect(() => {
-    loadAll().catch((error) => {
+    loadAll(true).catch((error) => {
       console.error(error);
       toast.error("加载配置失败", error instanceof Error ? error.message : "请稍后重试");
     });
@@ -143,26 +271,48 @@ export function ModelConfigPage() {
     }
   }
 
-  async function handleCreateTemplate() {
-    if (!config || !templateForm.name.trim()) {
+  async function handleSubmitTemplate() {
+    if (!templateConfig || !templateForm.name.trim()) {
       toast.info("模板名称未填写", "先填模板名称，再保存模板");
       return;
     }
+    const payload: ConfigTemplateRequest = {
+      ...templateForm,
+      name: templateForm.name.trim(),
+      description: templateForm.description.trim(),
+      config: templateConfig,
+      defaultTemplate: templateForm.defaultTemplate
+    };
     try {
-      await createTemplate({
-        ...templateForm,
-        name: templateForm.name.trim(),
-        description: templateForm.description.trim(),
-        config: toConfigPayload(config),
-        defaultTemplate: templateForm.defaultTemplate
-      });
-      setTemplateForm(templateSeed);
-      await loadAll();
-      toast.success("模板已保存", "这套模板可以在工作台直接选择");
+      if (editingTemplateId) {
+        await updateTemplate(editingTemplateId, payload);
+      } else {
+        await createTemplate(payload);
+      }
+      await loadAll(true);
+      toast.success(editingTemplateId ? "模板已更新" : "模板已保存", editingTemplateId ? "修改已入库并可立即用于后续任务" : "这套模板可以在工作台直接选择");
     } catch (error) {
       console.error(error);
-      toast.error("保存模板失败", error instanceof Error ? error.message : "请稍后重试");
+      toast.error(editingTemplateId ? "更新模板失败" : "保存模板失败", error instanceof Error ? error.message : "请稍后重试");
     }
+  }
+
+  function handleEditTemplate(template: ConfigTemplateResponse) {
+    setTemplateForm({
+      name: template.name,
+      description: template.description ?? "",
+      defaultTemplate: template.defaultTemplate
+    });
+    setTemplateConfig({ ...template.config });
+    setEditingTemplateId(template.id);
+    setExpandedTemplateId(template.id);
+  }
+
+  function handleCancelTemplateEdit() {
+    if (!config) {
+      return;
+    }
+    resetTemplateEditor(toConfigPayload(config));
   }
 
   async function reloadStats() {
@@ -179,11 +329,9 @@ export function ModelConfigPage() {
     }
   }
 
-  if (!config || !stats) {
+  if (!config || !stats || !templateConfig) {
     return <div className="panel">加载中...</div>;
   }
-
-  const currentSummary = buildConfigSummary(config);
 
   return (
     <div className="config-layout">
@@ -325,122 +473,160 @@ export function ModelConfigPage() {
         )}
 
         {tab === "templates" && (
-          <div className="panel">
-            <h3 className="panel-title">配置模板</h3>
-            <p className="summary-note">
-              模板是用户真正拿来跑任务的处理预设。工作台开始处理时会选择模板，历史再次处理时默认沿用原模板，也可以临时切换别的模板。
-            </p>
+          <div className="template-management">
+            <div className="panel template-editor-card">
+              <div className="template-editor-header">
+                <div>
+                  <h3 className="panel-title">{editingTemplateId ? "修改模板" : "新建模板"}</h3>
+                  <p className="summary-note">
+                    这里专门负责编辑模板本身。名称、说明和下面的参数都会直接进入模板，工作台选中后按这套配置执行。
+                  </p>
+                </div>
+                <div className="template-editor-actions">
+                  <button className="secondary-button" type="button" onClick={() => setTemplateConfig(toConfigPayload(config))}>
+                    用当前系统配置填充
+                  </button>
+                  {editingTemplateId ? (
+                    <button className="secondary-button" type="button" onClick={handleCancelTemplateEdit}>
+                      退出修改
+                    </button>
+                  ) : null}
+                </div>
+              </div>
 
-            <div className="form-grid">
-              <label>
-                模板名称
-                <input className="text-input" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} />
+              <div className="form-grid">
+                <label>
+                  模板名称
+                  <input className="text-input" value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} />
+                </label>
+                <label>
+                  模板说明
+                  <input className="text-input" value={templateForm.description} onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })} />
+                </label>
+              </div>
+
+              <label className="checkbox-row">
+                <input type="checkbox" checked={templateForm.defaultTemplate} onChange={(e) => setTemplateForm({ ...templateForm, defaultTemplate: e.target.checked })} />
+                <span>{editingTemplateId ? "保存后设为默认模板" : "创建后直接设为默认模板"}</span>
               </label>
-              <label>
-                模板说明
-                <input className="text-input" value={templateForm.description} onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })} />
-              </label>
-            </div>
 
-            <label className="checkbox-row">
-              <input type="checkbox" checked={templateForm.defaultTemplate} onChange={(e) => setTemplateForm({ ...templateForm, defaultTemplate: e.target.checked })} />
-              <span>创建后直接设为默认模板</span>
-            </label>
+              <TemplateConfigEditor config={templateConfig} onChange={setTemplateConfig} />
 
-            <div className="template-snapshot">
-              <div className="template-snapshot-title">当前将保存的模板快照</div>
-              <div className="template-summary-grid">
-                {currentSummary.map((item) => (
-                  <div key={item.label} className="template-summary-item">
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
-                  </div>
-                ))}
+              <div className="action-row">
+                <button className="primary-button" type="button" onClick={handleSubmitTemplate}>
+                  {editingTemplateId ? "保存模板修改" : "保存为新模板"}
+                </button>
               </div>
             </div>
 
-            <div className="action-row">
-              <button className="primary-button" type="button" onClick={handleCreateTemplate}>
-                保存当前配置为模板
-              </button>
-            </div>
-
-            <div className="template-list">
-              {templates.length === 0 ? (
-                <div className="empty-state">还没有配置模板。先保存一套常用设置。</div>
-              ) : templates.map((template) => (
-                <div key={template.id} className="template-card">
-                  <div className="template-card-head">
-                    <div>
-                      <strong>{template.name}</strong>
-                      <p>{template.description || "未填写说明"}</p>
-                    </div>
-                    <div className="template-card-meta">
-                      {template.defaultTemplate ? <span className="pill">默认模板</span> : null}
-                      <span className="template-created-at">{formatDateTime(template.createdAt)}</span>
-                    </div>
-                  </div>
-
-                  <div className="template-summary-grid">
-                    {buildConfigSummary(template.config).map((item) => (
-                      <div key={`${template.id}-${item.label}`} className="template-summary-item">
-                        <span>{item.label}</span>
-                        <strong>{item.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="action-row">
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          setConfig(await applyTemplate(template.id));
-                          toast.success("模板已载入配置管理", template.name);
-                        } catch (error) {
-                          console.error(error);
-                          toast.error("载入模板失败", error instanceof Error ? error.message : "请稍后重试");
-                        }
-                      }}
-                    >
-                      载入到配置管理
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await setDefaultTemplate(template.id);
-                          await loadAll();
-                          toast.success("默认模板已更新", template.name);
-                        } catch (error) {
-                          console.error(error);
-                          toast.error("设置默认模板失败", error instanceof Error ? error.message : "请稍后重试");
-                        }
-                      }}
-                    >
-                      设为默认模板
-                    </button>
-                    <button
-                      className="danger-button compact"
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await deleteTemplate(template.id);
-                          await loadAll();
-                          toast.success("模板已删除", template.name);
-                        } catch (error) {
-                          console.error(error);
-                          toast.error("删除模板失败", error instanceof Error ? error.message : "请稍后重试");
-                        }
-                      }}
-                    >
-                      删除
-                    </button>
-                  </div>
+            <div className="panel template-list-section">
+              <div className="template-list-header">
+                <div>
+                  <h3 className="panel-title">已有模板</h3>
+                  <p className="summary-note">
+                    列表只展示摘要。需要看细节时再展开，需要调整时点“修改”进入上方编辑器。
+                  </p>
                 </div>
-              ))}
+              </div>
+
+              <div className="template-list">
+                {templates.length === 0 ? (
+                  <div className="empty-state">还没有配置模板。先保存一套常用设置。</div>
+                ) : templates.map((template) => (
+                  <div key={template.id} className="template-card template-row">
+                    <div className="template-row-main">
+                      <div className="template-card-head">
+                        <div>
+                          <strong>{template.name}</strong>
+                          <p>{template.description || "未填写说明"}</p>
+                          <div className="template-brief">{buildTemplateHeadline(template.config)}</div>
+                        </div>
+                        <div className="template-card-meta">
+                          {template.defaultTemplate ? <span className="pill">默认模板</span> : null}
+                          <span className="template-created-at">{formatDateTime(template.createdAt)}</span>
+                        </div>
+                      </div>
+
+                      <div className="template-row-actions">
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => setExpandedTemplateId((current) => current === template.id ? null : template.id)}
+                        >
+                          {expandedTemplateId === template.id ? "收起详情" : "查看详情"}
+                        </button>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => handleEditTemplate(template)}
+                        >
+                          修改
+                        </button>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              setConfig(await applyTemplate(template.id));
+                              toast.success("已同步为系统默认配置", template.name);
+                            } catch (error) {
+                              console.error(error);
+                              toast.error("同步系统默认配置失败", error instanceof Error ? error.message : "请稍后重试");
+                            }
+                          }}
+                        >
+                          同步为系统默认配置
+                        </button>
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await setDefaultTemplate(template.id);
+                              await loadAll(false);
+                              toast.success("默认模板已更新", template.name);
+                            } catch (error) {
+                              console.error(error);
+                              toast.error("设置默认模板失败", error instanceof Error ? error.message : "请稍后重试");
+                            }
+                          }}
+                        >
+                          设为默认模板
+                        </button>
+                        <button
+                          className="danger-button compact"
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await deleteTemplate(template.id);
+                              await loadAll(true);
+                              toast.success("模板已删除", template.name);
+                            } catch (error) {
+                              console.error(error);
+                              toast.error("删除模板失败", error instanceof Error ? error.message : "请稍后重试");
+                            }
+                          }}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+
+                    {expandedTemplateId === template.id ? (
+                      <div className="template-details-panel">
+                        <div className="template-summary-grid">
+                          {buildConfigSummary(template.config).map((item) => (
+                            <div key={`${template.id}-${item.label}`} className="template-summary-item">
+                              <span>{item.label}</span>
+                              <strong>{item.value}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

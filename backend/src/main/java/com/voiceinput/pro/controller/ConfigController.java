@@ -49,6 +49,11 @@ public class ConfigController {
         return configService.createTemplate(request);
     }
 
+    @PutMapping("/templates/{id}")
+    public ConfigTemplateResponse updateTemplate(@PathVariable String id, @Valid @RequestBody ConfigTemplateRequest request) {
+        return configService.updateTemplate(id, request);
+    }
+
     @PostMapping("/templates/{id}/apply")
     public AppConfigResponse applyTemplate(@PathVariable String id) {
         return configService.applyTemplate(id);

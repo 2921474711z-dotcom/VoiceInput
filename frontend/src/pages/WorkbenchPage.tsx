@@ -1,9 +1,16 @@
-import { Copy, Download, Eraser, RefreshCcw, Save } from "lucide-react";
+import { Copy, Download, Eraser, Mic, RefreshCcw, Save, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../components/ToastProvider";
 import { prepareAudioUpload } from "../services/audio";
-import { createTask, getConfig, getMarkdownDownloadUrl, getTaskDetail, getTemplates, reoptimizeTask, saveTaskToHistory, uploadAudio } from "../services/api";
-import type { AppConfigResponse, ConfigTemplateResponse, SceneType, TaskDetailResponse, UploadAssetResponse } from "../types/api";
+import { createTask, createTextTask, getMarkdownDownloadUrl, getTaskDetail, getTemplates, reoptimizeTask, saveTaskToHistory, uploadAudio } from "../services/api";
+import {
+  buildRecordingFile,
+  cleanLiveTranscript,
+  getSpeechRecognitionConstructor,
+  getSupportedRecordingMimeType,
+  type SpeechRecognitionLike
+} from "../services/liveSpeech";
+import type { ConfigTemplateResponse, SceneType, TaskDetailResponse, UploadAssetResponse } from "../types/api";
 
 const scenes: Array<{ value: SceneType; label: string; description: string }> = [
   { value: "MEETING_MINUTES", label: "会议纪要", description: "输出议题、结论和待办事项" },
@@ -30,14 +37,17 @@ function buildTemplatePreview(template?: ConfigTemplateResponse | null) {
 
 export function WorkbenchPage() {
   const toast = useToast();
+  const [inputMode, setInputMode] = useState<"upload" | "live">("upload");
   const [scene, setScene] = useState<SceneType>("MEETING_MINUTES");
   const [upload, setUpload] = useState<UploadAssetResponse | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [task, setTask] = useState<TaskDetailResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [liveDraft, setLiveDraft] = useState("");
+  const [liveInterim, setLiveInterim] = useState("");
   const [message, setMessage] = useState("准备就绪，先选择模板再开始处理");
   const [templates, setTemplates] = useState<ConfigTemplateResponse[]>([]);
-  const [activeConfig, setActiveConfig] = useState<AppConfigResponse | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const selectedScene = scenes.find((item) => item.value === scene) ?? scenes[0];
   const selectedTemplate = useMemo(
@@ -46,14 +56,19 @@ export function WorkbenchPage() {
   );
   const taskScene = task ? scenes.find((item) => item.value === task.sceneType) : null;
   const notifiedStatusRef = useRef("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recordingChunksRef = useRef<BlobPart[]>([]);
+  const cancelRecordingRef = useRef(false);
+  const liveDraftRef = useRef("");
+  const liveInterimRef = useRef("");
 
   useEffect(() => {
-    Promise.all([getTemplates(), getConfig()])
-      .then(([templateData, configData]) => {
+    getTemplates()
+      .then((templateData) => {
         setTemplates(templateData);
-        setActiveConfig(configData);
         const preferredTemplateId =
-          configData.defaultTemplateId ||
           templateData.find((item) => item.defaultTemplate)?.id ||
           templateData[0]?.id ||
           "";
@@ -105,6 +120,163 @@ export function WorkbenchPage() {
       notifiedStatusRef.current = marker;
     }
   }, [task, toast]);
+
+  useEffect(() => {
+    return () => {
+      stopLiveCapture();
+    };
+  }, []);
+
+  function stopLiveCapture() {
+    speechRecognitionRef.current?.abort();
+    speechRecognitionRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  }
+
+  async function submitRecordedAudio(recordedFile: File, transcript: string) {
+    if (!selectedTemplateId) {
+      toast.info("还没有选择模板", "先选择本次处理模板");
+      return;
+    }
+
+    setLoading(true);
+    setMessage("实时录音已结束，正在上传并创建任务...");
+    try {
+      const prepared = await prepareAudioUpload(recordedFile);
+      const uploaded = await uploadAudio(prepared.file, prepared.durationSeconds);
+      setFile(prepared.file);
+      setUpload(uploaded);
+
+      const cleanedTranscript = cleanLiveTranscript(transcript);
+      if (!cleanedTranscript) {
+        throw new Error("实时草稿为空，请重新录音或改用上传音频");
+      }
+      const summary = await createTextTask(uploaded.id, scene, selectedTemplateId, cleanedTranscript);
+      const detail = await getTaskDetail(summary.id);
+      setTask(detail);
+      setMessage(`已按“${selectedTemplate?.name ?? "未命名模板"}”处理实时录音...`);
+      toast.success("实时语音已提交", prepared.normalized ? "录音已转为标准 WAV 并进入处理链路" : "录音已进入处理链路");
+    } catch (error) {
+      console.error(error);
+      toast.error("实时语音处理失败", error instanceof Error ? error.message : "请稍后重试");
+      setMessage("实时语音处理失败，请重试");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleStartLiveSpeech() {
+    if (recording || loading) {
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      toast.error("浏览器不支持实时录音", "请使用 Chrome 或 Edge 打开页面");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = getSupportedRecordingMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      cancelRecordingRef.current = false;
+      recordingChunksRef.current = [];
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onstop = () => {
+        const chunks = recordingChunksRef.current;
+        recordingChunksRef.current = [];
+        stopLiveCapture();
+        setRecording(false);
+        if (cancelRecordingRef.current) {
+          cancelRecordingRef.current = false;
+          return;
+        }
+        if (chunks.length === 0) {
+          toast.error("没有录到音频", "请检查麦克风权限后重试");
+          return;
+        }
+        void submitRecordedAudio(buildRecordingFile(chunks, recorder.mimeType || mimeType), `${liveDraftRef.current}${liveInterimRef.current}`);
+      };
+
+      const SpeechRecognitionCtor = getSpeechRecognitionConstructor();
+      if (SpeechRecognitionCtor) {
+        const recognition = new SpeechRecognitionCtor();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "zh-CN";
+        recognition.onresult = (event) => {
+          let finalText = "";
+          let interimText = "";
+          for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            if (result.isFinal) {
+              finalText += result[0].transcript;
+            } else {
+              interimText += result[0].transcript;
+            }
+          }
+          if (finalText) {
+            setLiveDraft((current) => {
+              const next = `${current}${finalText}`;
+              liveDraftRef.current = next;
+              return next;
+            });
+          }
+          liveInterimRef.current = interimText;
+          setLiveInterim(interimText);
+        };
+        recognition.onerror = (event) => {
+          console.error(event);
+          toast.info("实时草稿识别中断", "录音会继续保存，结束后仍会走正式处理");
+        };
+        recognition.onend = () => {
+          if (mediaRecorderRef.current?.state === "recording") {
+            try {
+              recognition.start();
+            } catch (error) {
+              console.error(error);
+            }
+          }
+        };
+        speechRecognitionRef.current = recognition;
+        recognition.start();
+      } else {
+        toast.info("浏览器不支持实时草稿", "录音会正常保存，结束后由后端正式识别");
+      }
+
+      setUpload(null);
+      setFile(null);
+      setTask(null);
+      setLiveDraft("");
+      setLiveInterim("");
+      liveDraftRef.current = "";
+      liveInterimRef.current = "";
+      recorder.start(1000);
+      setRecording(true);
+      setMessage("正在实时录音，说完后点击“结束并处理”");
+      toast.success("实时语音已开始", "页面会先显示草稿，结束后走正式处理链路");
+    } catch (error) {
+      console.error(error);
+      stopLiveCapture();
+      setRecording(false);
+      toast.error("无法开始实时语音", error instanceof Error ? error.message : "请检查麦克风权限");
+    }
+  }
+
+  function handleStopLiveSpeech() {
+    if (mediaRecorderRef.current?.state === "recording") {
+      setMessage("正在结束录音...");
+      speechRecognitionRef.current?.stop();
+      mediaRecorderRef.current.stop();
+    }
+  }
 
   async function handleChooseFile(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0];
@@ -211,6 +383,16 @@ export function WorkbenchPage() {
   }
 
   function handleClear() {
+    if (mediaRecorderRef.current?.state === "recording") {
+      cancelRecordingRef.current = true;
+      mediaRecorderRef.current.stop();
+    }
+    stopLiveCapture();
+    setRecording(false);
+    setLiveDraft("");
+    setLiveInterim("");
+    liveDraftRef.current = "";
+    liveInterimRef.current = "";
     setUpload(null);
     setFile(null);
     setTask(null);
@@ -264,16 +446,48 @@ export function WorkbenchPage() {
       <section className="workbench-main">
         <div className="panel upload-panel">
           <div className="upload-box">
+            <div className="mode-switch">
+              <button className={inputMode === "upload" ? "active" : ""} type="button" onClick={() => setInputMode("upload")} disabled={recording}>
+                上传音频
+              </button>
+              <button className={inputMode === "live" ? "active" : ""} type="button" onClick={() => setInputMode("live")} disabled={loading}>
+                实时说话
+              </button>
+            </div>
             <div className="panel-title-row">
               <h3 className="panel-title">上传音频</h3>
               <span className="status-badge">{message}</span>
             </div>
 
-            <label className="upload-dropzone">
+            <label className={`upload-dropzone ${inputMode === "upload" ? "" : "hidden-mode"}`}>
               <input type="file" accept="audio/*" hidden onChange={handleChooseFile} />
               <div className="upload-copy">点击上传或拖拽音频文件到此处</div>
               <div className="upload-hint">支持 mp3、wav、m4a、aac、flac、ogg。m4a/aac 会优先自动转成标准 WAV。</div>
             </label>
+
+            {inputMode === "live" ? (
+              <div className={`live-speech-card ${recording ? "recording" : ""}`}>
+                <div className="live-meter" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div>
+                  <div className="upload-copy">{recording ? "正在听你说话" : "点击开始，直接对着麦克风说话"}</div>
+                  <div className="upload-hint">页面先显示实时草稿；结束后会自动上传录音，并复用现有识别、优化、热词、历史和导出流程。</div>
+                </div>
+                <div className="live-draft">
+                  {liveDraft || liveInterim ? (
+                    <>
+                      <span>{liveDraft}</span>
+                      <em>{liveInterim}</em>
+                    </>
+                  ) : (
+                    <span className="muted-copy">实时草稿会显示在这里。浏览器不支持草稿时，仍会录音并在结束后正式识别。</span>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             {upload ? (
               <div className="file-row">
@@ -291,7 +505,7 @@ export function WorkbenchPage() {
             ) : null}
           </div>
 
-          <div className="upload-actions">
+          <div className={`upload-actions ${inputMode === "live" ? "live-mode" : ""}`}>
             <label>
               本次模板
               <select
@@ -313,6 +527,17 @@ export function WorkbenchPage() {
                 ))}
               </select>
             </label>
+            {inputMode === "live" && recording ? (
+              <button className="primary-button live-stop-button" type="button" onClick={handleStopLiveSpeech}>
+                <Square size={16} />
+                结束并处理
+              </button>
+            ) : inputMode === "live" ? (
+              <button className="primary-button live-record-button" type="button" onClick={handleStartLiveSpeech} disabled={loading || !selectedTemplateId}>
+                <Mic size={16} />
+                开始说话
+              </button>
+            ) : null}
             <button className="primary-button" type="button" onClick={handleProcess} disabled={!upload || loading || !selectedTemplateId}>
               开始处理
             </button>
@@ -328,10 +553,7 @@ export function WorkbenchPage() {
             <h3 className="panel-title">本次设置</h3>
           </div>
           <div className="text-meta">当前场景：{selectedScene.label}</div>
-          <div className="text-meta">
-            当前模板：{selectedTemplate?.name ?? "未选择"}
-            {activeConfig?.defaultTemplateName ? `，系统默认模板：${activeConfig.defaultTemplateName}` : ""}
-          </div>
+          <div className="text-meta">当前模板：{selectedTemplate?.name ?? "未选择"}</div>
           <div className="template-inline-preview">
             {buildTemplatePreview(selectedTemplate).map((item) => (
               <span key={item} className="scene-tag">{item}</span>
