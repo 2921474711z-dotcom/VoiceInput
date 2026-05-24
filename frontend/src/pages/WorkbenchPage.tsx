@@ -22,6 +22,33 @@ const scenes: Array<{ value: SceneType; label: string; description: string }> = 
   { value: "CHAT_REPLY", label: "聊天回复", description: "保持简洁自然，适合直接发送" }
 ];
 
+const WORKBENCH_STORAGE_KEY = "voiceinput-pro:workbench";
+
+type WorkbenchSnapshot = {
+  inputMode?: "upload" | "live";
+  scene?: SceneType;
+  upload?: UploadAssetResponse | null;
+  task?: TaskDetailResponse | null;
+  message?: string;
+  selectedTemplateId?: string;
+  proofreadOpen?: boolean;
+  proofreadRaw?: string;
+  proofreadOptimized?: string;
+  exportType?: ExportType;
+};
+
+function readWorkbenchSnapshot(): WorkbenchSnapshot | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(WORKBENCH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) as WorkbenchSnapshot : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildTemplatePreview(template?: ConfigTemplateResponse | null) {
   if (!template) {
     return [];
@@ -37,24 +64,25 @@ function buildTemplatePreview(template?: ConfigTemplateResponse | null) {
 }
 
 export function WorkbenchPage() {
+  const snapshot = readWorkbenchSnapshot();
   const toast = useToast();
-  const [inputMode, setInputMode] = useState<"upload" | "live">("upload");
-  const [scene, setScene] = useState<SceneType>("MEETING_MINUTES");
-  const [upload, setUpload] = useState<UploadAssetResponse | null>(null);
+  const [inputMode, setInputMode] = useState<"upload" | "live">(snapshot?.inputMode ?? "upload");
+  const [scene, setScene] = useState<SceneType>(snapshot?.scene ?? "MEETING_MINUTES");
+  const [upload, setUpload] = useState<UploadAssetResponse | null>(snapshot?.upload ?? null);
   const [file, setFile] = useState<File | null>(null);
-  const [task, setTask] = useState<TaskDetailResponse | null>(null);
+  const [task, setTask] = useState<TaskDetailResponse | null>(snapshot?.task ?? null);
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [liveDraft, setLiveDraft] = useState("");
   const [liveInterim, setLiveInterim] = useState("");
-  const [message, setMessage] = useState("准备就绪，先选择模板再开始处理");
+  const [message, setMessage] = useState(snapshot?.message ?? "准备就绪，先选择模板再开始处理");
   const [templates, setTemplates] = useState<ConfigTemplateResponse[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [proofreadOpen, setProofreadOpen] = useState(false);
-  const [proofreadRaw, setProofreadRaw] = useState("");
-  const [proofreadOptimized, setProofreadOptimized] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(snapshot?.selectedTemplateId ?? "");
+  const [proofreadOpen, setProofreadOpen] = useState(snapshot?.proofreadOpen ?? false);
+  const [proofreadRaw, setProofreadRaw] = useState(snapshot?.proofreadRaw ?? "");
+  const [proofreadOptimized, setProofreadOptimized] = useState(snapshot?.proofreadOptimized ?? "");
   const [proofreadMarkdown, setProofreadMarkdown] = useState("");
-  const [exportType, setExportType] = useState<ExportType>("DOCX");
+  const [exportType, setExportType] = useState<ExportType>(snapshot?.exportType ?? "DOCX");
   const selectedScene = scenes.find((item) => item.value === scene) ?? scenes[0];
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedTemplateId) ?? null,
@@ -78,13 +106,32 @@ export function WorkbenchPage() {
           templateData.find((item) => item.defaultTemplate)?.id ||
           templateData[0]?.id ||
           "";
-        setSelectedTemplateId(preferredTemplateId);
+        setSelectedTemplateId((current) => current || preferredTemplateId);
       })
       .catch((error) => {
         console.error(error);
         toast.error("加载模板失败", error instanceof Error ? error.message : "请稍后重试");
       });
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const nextSnapshot: WorkbenchSnapshot = {
+      inputMode,
+      scene,
+      upload,
+      task,
+      message,
+      selectedTemplateId,
+      proofreadOpen,
+      proofreadRaw,
+      proofreadOptimized,
+      exportType
+    };
+    window.localStorage.setItem(WORKBENCH_STORAGE_KEY, JSON.stringify(nextSnapshot));
+  }, [exportType, inputMode, message, proofreadOpen, proofreadOptimized, proofreadRaw, scene, selectedTemplateId, task, upload]);
 
   useEffect(() => {
     if (!task || !["PENDING", "PROCESSING"].includes(task.status)) {
@@ -451,7 +498,13 @@ export function WorkbenchPage() {
     setUpload(null);
     setFile(null);
     setTask(null);
+    setProofreadOpen(false);
+    setProofreadRaw("");
+    setProofreadOptimized("");
     setMessage("当前工作台已清空");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(WORKBENCH_STORAGE_KEY);
+    }
     toast.info("已清空", "上传记录和处理结果已重置");
   }
 
