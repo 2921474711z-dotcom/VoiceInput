@@ -1,12 +1,18 @@
 import type {
   AppConfigRequest,
   AppConfigResponse,
+  CreateExportRequest,
   ConfigTemplateRequest,
   ConfigTemplateResponse,
+  ExportRecordResponse,
+  ExportType,
   HistoryPageResponse,
   HotwordCategoryResponse,
   HotwordResponse,
+  ModelConnectionTestResponse,
   PagedHotwordResponse,
+  ProofreadTaskRequest,
+  ProofreadTaskResponse,
   SceneType,
   TaskDetailResponse,
   TaskStatus,
@@ -99,8 +105,35 @@ export async function deleteHistory(id: string) {
   return request<void>(`/history/${id}`, { method: "DELETE" });
 }
 
+export async function saveProofread(id: string, payload: ProofreadTaskRequest) {
+  return request<ProofreadTaskResponse>(`/tasks/${id}/proofread`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
 export function getMarkdownDownloadUrl(id: string) {
   return `${API_BASE_URL}/history/${id}/export-markdown`;
+}
+
+export async function getExports(params: { exportType?: ExportType }) {
+  const query = new URLSearchParams();
+  if (params.exportType) query.append("exportType", params.exportType);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<ExportRecordResponse[]>(`/exports${suffix}`);
+}
+
+export async function createExport(payload: CreateExportRequest) {
+  return request<ExportRecordResponse>("/exports", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export function getExportDownloadUrl(id: string) {
+  return `${API_BASE_URL}/exports/${id}/download`;
 }
 
 export async function getHotwordCategories() {
@@ -191,6 +224,14 @@ export async function setDefaultTemplate(id: string) {
 
 export async function deleteTemplate(id: string) {
   return request<void>(`/config/templates/${id}`, { method: "DELETE" });
+}
+
+export async function testModelConnection(target: "ASR" | "LLM", uploadId?: string) {
+  return request<ModelConnectionTestResponse>("/config/test-connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target, uploadId })
+  });
 }
 
 export async function getUsageStats(params: { sceneType?: SceneType; from?: string; to?: string }) {

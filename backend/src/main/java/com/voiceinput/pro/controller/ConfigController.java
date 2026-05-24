@@ -4,7 +4,10 @@ import com.voiceinput.pro.model.dto.AppConfigRequest;
 import com.voiceinput.pro.model.dto.AppConfigResponse;
 import com.voiceinput.pro.model.dto.ConfigTemplateRequest;
 import com.voiceinput.pro.model.dto.ConfigTemplateResponse;
+import com.voiceinput.pro.model.dto.ModelConnectionTestRequest;
+import com.voiceinput.pro.model.dto.ModelConnectionTestResponse;
 import com.voiceinput.pro.service.ConfigService;
+import com.voiceinput.pro.service.ModelConnectionTestService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ConfigController {
 
     private final ConfigService configService;
+    private final ModelConnectionTestService modelConnectionTestService;
 
     @GetMapping
     public AppConfigResponse getActive() {
@@ -37,6 +41,11 @@ public class ConfigController {
     @PostMapping("/reset")
     public AppConfigResponse reset() {
         return configService.resetToDefault();
+    }
+
+    @PostMapping("/test-connection")
+    public ModelConnectionTestResponse testConnection(@Valid @RequestBody ModelConnectionTestRequest request) {
+        return modelConnectionTestService.testConnection(request.target(), request.uploadId());
     }
 
     @GetMapping("/templates")

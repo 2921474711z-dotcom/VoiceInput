@@ -3,12 +3,15 @@ package com.voiceinput.pro.controller;
 import com.voiceinput.pro.model.dto.CreateTaskRequest;
 import com.voiceinput.pro.model.dto.CreateTextTaskRequest;
 import com.voiceinput.pro.model.dto.HistoryPageResponse;
+import com.voiceinput.pro.model.dto.ProofreadTaskRequest;
+import com.voiceinput.pro.model.dto.ProofreadTaskResponse;
 import com.voiceinput.pro.model.dto.ReoptimizeTaskRequest;
 import com.voiceinput.pro.model.dto.TaskDetailResponse;
 import com.voiceinput.pro.model.dto.TaskSummaryResponse;
 import com.voiceinput.pro.model.enums.SceneType;
 import com.voiceinput.pro.model.enums.TaskStatus;
 import com.voiceinput.pro.service.TaskService;
+import com.voiceinput.pro.service.ProofreadService;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TaskController {
 
     private final TaskService taskService;
+    private final ProofreadService proofreadService;
 
     @PostMapping("/tasks/process")
     public TaskSummaryResponse createTask(@Valid @RequestBody CreateTaskRequest request) {
@@ -50,6 +54,11 @@ public class TaskController {
     @PostMapping("/tasks/{id}/save")
     public TaskDetailResponse saveToHistory(@PathVariable String id) {
         return taskService.saveToHistory(id);
+    }
+
+    @PostMapping("/tasks/{id}/proofread")
+    public ProofreadTaskResponse proofread(@PathVariable String id, @Valid @RequestBody ProofreadTaskRequest request) {
+        return proofreadService.saveProofread(id, request);
     }
 
     @PostMapping("/tasks/{id}/reoptimize")

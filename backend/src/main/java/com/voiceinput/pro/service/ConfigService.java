@@ -229,9 +229,13 @@ public class ConfigService {
             case "更准确" -> new BigDecimal("2.20");
             default -> new BigDecimal("1.35");
         };
-        BigDecimal llmMinuteCost = appProperties.getPricing().getAsrPricePerMinute()
-            .add(appProperties.getPricing().getLlmInputPricePer1k().multiply(new BigDecimal("8")))
-            .add(appProperties.getPricing().getLlmOutputPricePer1k().multiply(new BigDecimal("4")));
+        AppProperties.Pricing pricing = appProperties.getPricing() == null ? new AppProperties.Pricing() : appProperties.getPricing();
+        AppProperties.ModelEndpoint asrEndpoint = appProperties.getAsr() == null ? new AppProperties.ModelEndpoint() : appProperties.getAsr();
+        AppProperties.ModelEndpoint llmEndpoint = appProperties.getLlm() == null ? new AppProperties.ModelEndpoint() : appProperties.getLlm();
+        AppProperties.ModelConfig modelConfig = appProperties.getModel() == null ? new AppProperties.ModelConfig() : appProperties.getModel();
+        BigDecimal llmMinuteCost = pricing.getAsrPricePerMinute()
+            .add(pricing.getLlmInputPricePer1k().multiply(new BigDecimal("8")))
+            .add(pricing.getLlmOutputPricePer1k().multiply(new BigDecimal("4")));
 
         String defaultTemplateName = null;
         if (entity.getDefaultTemplateId() != null && !entity.getDefaultTemplateId().isBlank()) {
@@ -254,14 +258,14 @@ public class ConfigService {
             normalizeConfigValue(entity.getCostMode(), DEFAULT_COST_MODE, COST_MODES),
             entity.getAsrModelRoute(),
             entity.getLlmModelRoute(),
-            appProperties.getAsr().getProvider(),
-            appProperties.getAsr().getBaseUrl(),
+            asrEndpoint.getProvider(),
+            asrEndpoint.getBaseUrl(),
             entity.getAsrModelRoute(),
-            appProperties.getLlm().getProvider(),
-            appProperties.getLlm().getBaseUrl(),
+            llmEndpoint.getProvider(),
+            llmEndpoint.getBaseUrl(),
             entity.getLlmModelRoute(),
-            appProperties.getModel().getTimeoutSeconds(),
-            appProperties.getModel().getMaxRetries(),
+            modelConfig.getTimeoutSeconds(),
+            modelConfig.getMaxRetries(),
             estimatedSeconds,
             llmMinuteCost.setScale(4, RoundingMode.HALF_UP),
             entity.getDefaultTemplateId(),

@@ -13,6 +13,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import jakarta.annotation.PostConstruct;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -118,5 +119,52 @@ public class StorageService {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "导出 Markdown 失败");
         }
     }
-}
 
+    @Transactional
+    public ExportRecordEntity saveExport(
+        String taskId,
+        String taskTitle,
+        String fileName,
+        byte[] bytes,
+        String exportType,
+        String contentSource,
+        String contentType,
+        String objectPrefix
+    ) {
+        try {
+            String objectKey = "%s/%s/%s".formatted(objectPrefix, LocalDate.now(), fileName);
+            minioClient.putObject(
+                PutObjectArgs.builder()
+                    .bucket(appProperties.getStorage().getBucket())
+                    .object(objectKey)
+                    .stream(new ByteArrayInputStream(bytes), bytes.length, -1)
+                    .contentType(contentType)
+                    .build()
+            );
+
+            ExportRecordEntity record = new ExportRecordEntity();
+            record.setTaskId(taskId);
+            record.setTaskTitle(taskTitle);
+            record.setFileName(fileName);
+            record.setObjectKey(objectKey);
+            record.setExportType(exportType);
+            record.setContentSource(contentSource);
+            record.setContentType(contentType);
+            record.setSizeBytes((long) bytes.length);
+            record.setStatus("SUCCESS");
+            return exportRecordRepository.save(record);
+        } catch (Exception ex) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "导出文件写入对象存储失败：" + ex.getMessage());
+        }
+    }
+
+    public byte[] readExportBytes(ExportRecordEntity record) {
+        try (InputStream inputStream = getObjectStream(record.getObjectKey());
+             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            inputStream.transferTo(outputStream);
+            return outputStream.toByteArray();
+        } catch (Exception ex) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "读取导出文件失败：" + ex.getMessage());
+        }
+    }
+}

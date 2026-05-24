@@ -29,6 +29,10 @@ public record TaskDetailResponse(
     Long totalDurationMs,
     Boolean savedToHistory,
     String errorMessage,
+    String proofreadRevisionId,
+    String proofreadRawText,
+    String proofreadOptimizedText,
+    String proofreadMarkdownContent,
     LocalDateTime createdAt,
     LocalDateTime completedAt,
     List<HotwordMatchResponse> hotwordMatches

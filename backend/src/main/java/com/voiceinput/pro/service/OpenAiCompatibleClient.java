@@ -117,6 +117,44 @@ public class OpenAiCompatibleClient {
         );
     }
 
+    public ConnectionProbeResult testLlmConnection(AppConfigEntity currentConfig) {
+        AppProperties.ModelEndpoint config = resolveLlmEndpoint(currentConfig);
+        validate(config.getApiKey(), "LLM_API_KEY 未配置");
+        Instant start = Instant.now();
+        Map<String, Object> body = Map.of(
+            "model", config.getModel(),
+            "max_completion_tokens", 16,
+            "messages", List.of(
+                Map.of("role", "system", "content", "你是连接测试助手，只返回 OK。"),
+                Map.of("role", "user", "content", "请返回 OK")
+            )
+        );
+
+        Map<?, ?> response = client(config)
+            .post()
+            .uri(buildV1Uri(config, "/chat/completions"))
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(body)
+            .retrieve()
+            .onStatus(HttpStatusCode::isError, clientResponse -> mapModelError(clientResponse, "LLM 连接测试失败"))
+            .bodyToMono(Map.class)
+            .onErrorResume(ex -> Mono.error(wrapModelException(ex, "LLM 连接测试失败")))
+            .retryWhen(retrySpec("LLM 连接测试失败"))
+            .block(requestTimeout());
+
+        String content = extractMessageText(firstMessage(response));
+        return new ConnectionProbeResult(true, content.isBlank() ? "LLM 连接成功" : "LLM 连接成功：" + content, Duration.between(start, Instant.now()).toMillis());
+    }
+
+    public ConnectionProbeResult testAsrConnection(File file, AppConfigEntity currentConfig) {
+        TranscriptionResult result = transcribe(file, currentConfig);
+        String sample = result.text() == null || result.text().isBlank() ? "未返回可见文本" : result.text();
+        if (sample.length() > 80) {
+            sample = sample.substring(0, 80) + "...";
+        }
+        return new ConnectionProbeResult(true, "ASR 真实音频测试成功：" + sample, result.durationMs());
+    }
+
     private TranscriptionResult transcribeByOpenAiAudioApi(File file, AppProperties.ModelEndpoint config, AppConfigEntity currentConfig) {
         Instant start = Instant.now();
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
@@ -592,5 +630,8 @@ public class OpenAiCompatibleClient {
         int completionTokens,
         long durationMs
     ) {
+    }
+
+    public record ConnectionProbeResult(boolean success, String message, long durationMs) {
     }
 }

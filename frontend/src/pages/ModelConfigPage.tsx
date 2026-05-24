@@ -9,10 +9,12 @@ import {
   getUsageStats,
   resetConfig,
   setDefaultTemplate,
+  testModelConnection,
   updateTemplate,
-  updateConfig
+  updateConfig,
+  uploadAudio
 } from "../services/api";
-import type { AppConfigRequest, AppConfigResponse, ConfigTemplateRequest, ConfigTemplateResponse, SceneType, UsageStatsResponse } from "../types/api";
+import type { AppConfigRequest, AppConfigResponse, ConfigTemplateRequest, ConfigTemplateResponse, ModelConnectionTestResponse, SceneType, UsageStatsResponse } from "../types/api";
 
 function createTemplateSeed() {
   return { name: "", description: "", defaultTemplate: false };
@@ -222,6 +224,8 @@ export function ModelConfigPage() {
   const [statsSceneType, setStatsSceneType] = useState("");
   const [statsFrom, setStatsFrom] = useState("");
   const [statsTo, setStatsTo] = useState("");
+  const [connectionResult, setConnectionResult] = useState<ModelConnectionTestResponse | null>(null);
+  const [testingConnection, setTestingConnection] = useState<"ASR" | "LLM" | null>(null);
 
   function resetTemplateEditor(baseConfig: AppConfigRequest) {
     setTemplateForm(createTemplateSeed());
@@ -257,6 +261,47 @@ export function ModelConfigPage() {
     } catch (error) {
       console.error(error);
       toast.error("保存配置失败", error instanceof Error ? error.message : "请稍后重试");
+    }
+  }
+
+  async function handleTestLlm() {
+    setTestingConnection("LLM");
+    try {
+      const result = await testModelConnection("LLM");
+      setConnectionResult(result);
+      result.status === "SUCCESS"
+        ? toast.success("LLM 连接测试成功", result.message)
+        : toast.error("LLM 连接测试失败", result.message);
+    } catch (error) {
+      console.error(error);
+      toast.error("LLM 连接测试失败", error instanceof Error ? error.message : "请检查模型配置");
+    } finally {
+      setTestingConnection(null);
+    }
+  }
+
+  async function handleTestAsr(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      const result = await testModelConnection("ASR");
+      setConnectionResult(result);
+      toast.info("ASR 需要测试音频", result.message);
+      return;
+    }
+    setTestingConnection("ASR");
+    try {
+      const uploaded = await uploadAudio(file);
+      const result = await testModelConnection("ASR", uploaded.id);
+      setConnectionResult(result);
+      result.status === "SUCCESS"
+        ? toast.success("ASR 真实音频测试成功", result.message)
+        : toast.error("ASR 真实音频测试失败", result.message);
+    } catch (error) {
+      console.error(error);
+      toast.error("ASR 连接测试失败", error instanceof Error ? error.message : "请检查 ASR 配置和测试音频");
+    } finally {
+      setTestingConnection(null);
     }
   }
 
@@ -367,6 +412,22 @@ export function ModelConfigPage() {
                 <div><span>当前默认 LLM 路由</span><strong>{config.llmModelRoute}</strong></div>
                 <div><span>系统默认模板</span><strong>{config.defaultTemplateName ?? "未设置"}</strong></div>
                 <div><span>请求控制</span><strong>{config.modelTimeoutSeconds}s / {config.modelMaxRetries} 次重试</strong></div>
+              </div>
+              <div className="connection-test-panel">
+                <button className="secondary-button" type="button" onClick={handleTestLlm} disabled={testingConnection !== null}>
+                  {testingConnection === "LLM" ? "测试 LLM 中..." : "测试 LLM 连接"}
+                </button>
+                <label className="secondary-button file-test-button">
+                  {testingConnection === "ASR" ? "测试 ASR 中..." : "上传音频测试 ASR"}
+                  <input type="file" accept="audio/*" hidden onChange={handleTestAsr} disabled={testingConnection !== null} />
+                </label>
+                {connectionResult ? (
+                  <div className={`connection-result ${connectionResult.status.toLowerCase()}`}>
+                    <strong>{connectionResult.target} · {connectionResult.status}</strong>
+                    <span>{connectionResult.message}</span>
+                    <small>{connectionResult.provider} / {connectionResult.modelName} / {connectionResult.durationMs}ms</small>
+                  </div>
+                ) : null}
               </div>
             </div>
 

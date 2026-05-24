@@ -15,6 +15,8 @@ public class ExportRecordEntity extends AuditableEntity {
     @Column(nullable = false)
     private String taskId;
 
+    private String taskTitle;
+
     @Column(nullable = false)
     private String fileName;
 
@@ -23,4 +25,16 @@ public class ExportRecordEntity extends AuditableEntity {
 
     @Column(nullable = false)
     private String exportType;
+
+    private String contentType;
+
+    private String contentSource;
+
+    private Long sizeBytes;
+
+    @Column(nullable = false)
+    private String status = "SUCCESS";
+
+    @Column(columnDefinition = "TEXT")
+    private String errorMessage;
 }

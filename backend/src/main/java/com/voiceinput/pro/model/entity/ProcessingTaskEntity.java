@@ -84,4 +84,17 @@ public class ProcessingTaskEntity extends AuditableEntity {
     private String errorMessage;
 
     private LocalDateTime completedAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String proofreadRawText;
+
+    @Column(columnDefinition = "TEXT")
+    private String proofreadOptimizedText;
+
+    @Column(columnDefinition = "TEXT")
+    private String proofreadMarkdownContent;
+
+    private String proofreadRevisionId;
+
+    private LocalDateTime proofreadAt;
 }

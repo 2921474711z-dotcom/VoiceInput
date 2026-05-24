@@ -1,9 +1,10 @@
-import { ChartColumn, ClipboardList, History, Home, Settings } from "lucide-react";
+import { ChartColumn, ClipboardList, Download, History, Home, Settings } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const navItems = [
   { to: "/", label: "工作台", icon: Home },
   { to: "/history", label: "历史记录", icon: History },
+  { to: "/exports", label: "导出中心", icon: Download },
   { to: "/hotwords", label: "热词管理", icon: ClipboardList },
   { to: "/config", label: "模型配置", icon: Settings }
 ];
@@ -39,4 +40,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-

@@ -63,9 +63,64 @@ export interface TaskDetailResponse {
   totalDurationMs?: number;
   savedToHistory?: boolean;
   errorMessage?: string;
+  proofreadRevisionId?: string;
+  proofreadRawText?: string;
+  proofreadOptimizedText?: string;
+  proofreadMarkdownContent?: string;
   createdAt: string;
   completedAt?: string;
   hotwordMatches: HotwordMatchResponse[];
+}
+
+export type ExportType = "DOCX" | "MARKDOWN" | "TXT" | "JSON";
+export type ExportContentSource = "MODEL" | "PROOFREAD";
+
+export interface CreateExportRequest {
+  taskId: string;
+  exportType: ExportType;
+  contentSource: ExportContentSource;
+}
+
+export interface ExportRecordResponse {
+  id: string;
+  taskId: string;
+  taskTitle?: string;
+  fileName: string;
+  exportType: ExportType;
+  contentType: string;
+  contentSource: ExportContentSource;
+  sizeBytes: number;
+  status: string;
+  errorMessage?: string;
+  createdAt: string;
+}
+
+export interface ProofreadTaskRequest {
+  rawText: string;
+  optimizedText: string;
+  markdownContent?: string;
+}
+
+export interface ProofreadTaskResponse {
+  taskId: string;
+  proofreadRevisionId: string;
+  rawText: string;
+  optimizedText: string;
+  markdownContent?: string;
+  proofreadAt: string;
+}
+
+export interface ModelConnectionTestResponse {
+  id: string;
+  target: "ASR" | "LLM";
+  provider?: string;
+  baseUrl?: string;
+  modelName?: string;
+  status: "SUCCESS" | "FAILED" | "NEEDS_AUDIO";
+  message: string;
+  durationMs: number;
+  uploadId?: string;
+  createdAt: string;
 }
 
 export interface HistoryPageResponse {

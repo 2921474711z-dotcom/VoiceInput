@@ -1,8 +1,8 @@
-import { Copy, Download, RefreshCcw, Trash2 } from "lucide-react";
+import { Copy, Download, Edit3, FileDown, RefreshCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "../components/ToastProvider";
-import { deleteHistory, getHistory, getHistoryDetail, getMarkdownDownloadUrl, getTemplates, reoptimizeTask } from "../services/api";
-import type { ConfigTemplateResponse, SceneType, TaskDetailResponse, TaskStatus, TaskSummaryResponse } from "../types/api";
+import { createExport, deleteHistory, getExportDownloadUrl, getHistory, getHistoryDetail, getMarkdownDownloadUrl, getTemplates, reoptimizeTask, saveProofread } from "../services/api";
+import type { ConfigTemplateResponse, ExportContentSource, ExportType, SceneType, TaskDetailResponse, TaskStatus, TaskSummaryResponse } from "../types/api";
 
 const sceneOptions: Array<{ label: string; value?: SceneType }> = [
   { label: "全部场景" },
@@ -37,6 +37,12 @@ export function HistoryPage() {
   const [total, setTotal] = useState(0);
   const [size] = useState(10);
   const [tab, setTab] = useState<"optimized" | "raw">("optimized");
+  const [proofreadOpen, setProofreadOpen] = useState(false);
+  const [proofreadRaw, setProofreadRaw] = useState("");
+  const [proofreadOptimized, setProofreadOptimized] = useState("");
+  const [proofreadMarkdown, setProofreadMarkdown] = useState("");
+  const [exportType, setExportType] = useState<ExportType>("DOCX");
+  const [exportSource, setExportSource] = useState<ExportContentSource>("MODEL");
 
   const selectedTemplateName = useMemo(
     () => templates.find((item) => item.id === detailTemplateId)?.name ?? detail?.templateName ?? "未命名模板",
@@ -70,6 +76,7 @@ export function HistoryPage() {
       const selected = await getHistoryDetail(current.id);
       setDetail(selected);
       setDetailTemplateId(selected.templateId ?? "");
+      resetProofreadEditor(selected);
     } else {
       setDetail(null);
       setDetailTemplateId("");
@@ -109,6 +116,7 @@ export function HistoryPage() {
       const data = await getHistoryDetail(id);
       setDetail(data);
       setDetailTemplateId(data.templateId ?? "");
+      resetProofreadEditor(data);
     } catch (error) {
       console.error(error);
       toast.error("读取详情失败", error instanceof Error ? error.message : "请稍后重试");
@@ -154,6 +162,54 @@ export function HistoryPage() {
     } catch (error) {
       console.error(error);
       toast.error("复制失败", error instanceof Error ? error.message : "浏览器未允许访问剪贴板");
+    }
+  }
+
+  function resetProofreadEditor(data: TaskDetailResponse) {
+    setProofreadRaw(data.proofreadRawText || data.rawText || "");
+    setProofreadOptimized(data.proofreadOptimizedText || data.optimizedText || "");
+    setProofreadMarkdown(data.proofreadMarkdownContent || data.markdownContent || "");
+    setExportSource(data.proofreadRevisionId ? "PROOFREAD" : "MODEL");
+  }
+
+  async function handleSaveProofread() {
+    if (!detail) {
+      return;
+    }
+    try {
+      const result = await saveProofread(detail.id, {
+        rawText: proofreadRaw,
+        optimizedText: proofreadOptimized,
+        markdownContent: proofreadMarkdown
+      });
+      const fresh = await getHistoryDetail(detail.id);
+      setDetail(fresh);
+      setExportSource("PROOFREAD");
+      toast.success("人工校对已保存", `校对版本：${result.proofreadRevisionId}`);
+    } catch (error) {
+      console.error(error);
+      toast.error("保存校对失败", error instanceof Error ? error.message : "请稍后重试");
+    }
+  }
+
+  async function handleCreateExport() {
+    if (!detail) {
+      return;
+    }
+    try {
+      const record = await createExport({
+        taskId: detail.id,
+        exportType,
+        contentSource: exportSource
+      });
+      const link = document.createElement("a");
+      link.href = getExportDownloadUrl(record.id);
+      link.download = record.fileName;
+      link.click();
+      toast.success("导出已生成", `${record.fileName} 已写入导出中心`);
+    } catch (error) {
+      console.error(error);
+      toast.error("生成导出失败", error instanceof Error ? error.message : "请稍后重试");
     }
   }
 
@@ -351,7 +407,56 @@ export function HistoryPage() {
                 原始识别文本
               </button>
             </div>
-            <div className="text-view compact">{tab === "optimized" ? detail.optimizedText : detail.rawText}</div>
+            <div className="text-view compact">
+              {tab === "optimized"
+                ? (detail.proofreadOptimizedText || detail.optimizedText)
+                : (detail.proofreadRawText || detail.rawText)}
+            </div>
+            {detail.proofreadRevisionId ? (
+              <div className="text-meta">当前展示人工校对版：{detail.proofreadRevisionId}</div>
+            ) : null}
+            <div className="proofread-panel">
+              <button className="secondary-button" type="button" onClick={() => setProofreadOpen((value) => !value)}>
+                <Edit3 size={16} />
+                {proofreadOpen ? "收起人工校对" : "人工校对"}
+              </button>
+              {proofreadOpen ? (
+                <div className="proofread-editor">
+                  <label>
+                    校对原始文本
+                    <textarea className="text-input textarea-input" value={proofreadRaw} onChange={(event) => setProofreadRaw(event.target.value)} />
+                  </label>
+                  <label>
+                    校对优化文本
+                    <textarea className="text-input textarea-input" value={proofreadOptimized} onChange={(event) => setProofreadOptimized(event.target.value)} />
+                  </label>
+                  <label>
+                    校对 Markdown
+                    <textarea className="text-input textarea-input" value={proofreadMarkdown} onChange={(event) => setProofreadMarkdown(event.target.value)} />
+                  </label>
+                  <button className="primary-button" type="button" onClick={handleSaveProofread}>
+                    <Save size={16} />
+                    保存校对版本
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <div className="export-inline-panel">
+              <select className="select-input" value={exportType} onChange={(event) => setExportType(event.target.value as ExportType)}>
+                <option value="DOCX">DOCX</option>
+                <option value="MARKDOWN">Markdown</option>
+                <option value="TXT">TXT</option>
+                <option value="JSON">JSON</option>
+              </select>
+              <select className="select-input" value={exportSource} onChange={(event) => setExportSource(event.target.value as ExportContentSource)}>
+                <option value="MODEL">模型输出版</option>
+                <option value="PROOFREAD" disabled={!detail.proofreadRevisionId}>人工校对版</option>
+              </select>
+              <button className="primary-link-button" type="button" onClick={handleCreateExport}>
+                <FileDown size={16} />
+                生成导出
+              </button>
+            </div>
             <div className="action-grid">
               <button className="secondary-button" type="button" onClick={handleCopy}>
                 <Copy size={16} />

@@ -1,8 +1,8 @@
-import { Copy, Download, Eraser, Mic, RefreshCcw, Save, Square } from "lucide-react";
+import { Copy, Download, Edit3, Eraser, FileDown, Mic, RefreshCcw, Save, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../components/ToastProvider";
 import { prepareAudioUpload } from "../services/audio";
-import { createTask, createTextTask, getMarkdownDownloadUrl, getTaskDetail, getTemplates, reoptimizeTask, saveTaskToHistory, uploadAudio } from "../services/api";
+import { createExport, createTask, createTextTask, getExportDownloadUrl, getMarkdownDownloadUrl, getTaskDetail, getTemplates, reoptimizeTask, saveProofread, saveTaskToHistory, uploadAudio } from "../services/api";
 import {
   buildRecordingFile,
   cleanLiveTranscript,
@@ -10,7 +10,7 @@ import {
   getSupportedRecordingMimeType,
   type SpeechRecognitionLike
 } from "../services/liveSpeech";
-import type { ConfigTemplateResponse, SceneType, TaskDetailResponse, UploadAssetResponse } from "../types/api";
+import type { ConfigTemplateResponse, ExportType, SceneType, TaskDetailResponse, UploadAssetResponse } from "../types/api";
 
 const scenes: Array<{ value: SceneType; label: string; description: string }> = [
   { value: "MEETING_MINUTES", label: "会议纪要", description: "输出议题、结论和待办事项" },
@@ -49,6 +49,11 @@ export function WorkbenchPage() {
   const [message, setMessage] = useState("准备就绪，先选择模板再开始处理");
   const [templates, setTemplates] = useState<ConfigTemplateResponse[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [proofreadOpen, setProofreadOpen] = useState(false);
+  const [proofreadRaw, setProofreadRaw] = useState("");
+  const [proofreadOptimized, setProofreadOptimized] = useState("");
+  const [proofreadMarkdown, setProofreadMarkdown] = useState("");
+  const [exportType, setExportType] = useState<ExportType>("DOCX");
   const selectedScene = scenes.find((item) => item.value === scene) ?? scenes[0];
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedTemplateId) ?? null,
@@ -105,7 +110,11 @@ export function WorkbenchPage() {
   useEffect(() => {
     if (!task) {
       notifiedStatusRef.current = "";
+      syncProofreadDraft(null);
       return;
+    }
+    if (task.status === "SUCCESS") {
+      syncProofreadDraft(task);
     }
     const marker = `${task.id}:${task.status}`;
     if (notifiedStatusRef.current === marker) {
@@ -373,6 +382,54 @@ export function WorkbenchPage() {
     }
   }
 
+  function syncProofreadDraft(detail: TaskDetailResponse | null) {
+    setProofreadRaw(detail?.proofreadRawText || detail?.rawText || "");
+    setProofreadOptimized(detail?.proofreadOptimizedText || detail?.optimizedText || "");
+    setProofreadMarkdown(detail?.proofreadMarkdownContent || detail?.markdownContent || "");
+  }
+
+  async function handleSaveProofread() {
+    if (!task) {
+      return;
+    }
+    try {
+      await saveProofread(task.id, {
+        rawText: proofreadRaw,
+        optimizedText: proofreadOptimized,
+        markdownContent: proofreadMarkdown
+      });
+      const detail = await getTaskDetail(task.id);
+      setTask(detail);
+      syncProofreadDraft(detail);
+      toast.success("人工校对已保存", "后续导出 DOCX 会优先使用校对版");
+    } catch (error) {
+      console.error(error);
+      toast.error("保存校对失败", error instanceof Error ? error.message : "请稍后重试");
+    }
+  }
+
+  async function handleCreateExport() {
+    if (!task) {
+      toast.info("暂无可导出内容", "先完成一次处理");
+      return;
+    }
+    try {
+      const record = await createExport({
+        taskId: task.id,
+        exportType,
+        contentSource: task.proofreadRevisionId ? "PROOFREAD" : "MODEL"
+      });
+      const link = document.createElement("a");
+      link.href = getExportDownloadUrl(record.id);
+      link.download = record.fileName;
+      link.click();
+      toast.success("导出已生成", `${record.fileName} 已写入导出中心`);
+    } catch (error) {
+      console.error(error);
+      toast.error("生成导出失败", error instanceof Error ? error.message : "请稍后重试");
+    }
+  }
+
   function handleSceneSelect(nextScene: SceneType) {
     setScene(nextScene);
     const next = scenes.find((item) => item.value === nextScene);
@@ -599,6 +656,42 @@ export function WorkbenchPage() {
                 <Download size={16} />
                 导出 Markdown
               </button>
+            </div>
+            <div className="proofread-panel">
+              <button className="secondary-button" type="button" onClick={() => setProofreadOpen((value) => !value)} disabled={!task}>
+                <Edit3 size={16} />
+                {proofreadOpen ? "收起人工校对" : "人工校对"}
+              </button>
+              <select className="select-input" value={exportType} onChange={(event) => setExportType(event.target.value as ExportType)} disabled={!task}>
+                <option value="DOCX">DOCX</option>
+                <option value="MARKDOWN">Markdown</option>
+                <option value="TXT">TXT</option>
+                <option value="JSON">JSON</option>
+              </select>
+              <button className="primary-link-button" type="button" onClick={handleCreateExport} disabled={!task}>
+                <FileDown size={16} />
+                生成导出
+              </button>
+              {proofreadOpen && task ? (
+                <div className="proofread-editor">
+                  <label>
+                    校对原始文本
+                    <textarea className="text-input textarea-input" value={proofreadRaw} onChange={(event) => setProofreadRaw(event.target.value)} />
+                  </label>
+                  <label>
+                    校对优化文本
+                    <textarea className="text-input textarea-input" value={proofreadOptimized} onChange={(event) => setProofreadOptimized(event.target.value)} />
+                  </label>
+                  <label>
+                    校对 Markdown
+                    <textarea className="text-input textarea-input" value={proofreadMarkdown} onChange={(event) => setProofreadMarkdown(event.target.value)} />
+                  </label>
+                  <button className="primary-button" type="button" onClick={handleSaveProofread}>
+                    <Save size={16} />
+                    保存校对版本
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

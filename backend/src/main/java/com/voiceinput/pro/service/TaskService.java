@@ -252,6 +252,10 @@ public class TaskService {
             task.getTotalDurationMs(),
             task.getSavedToHistory(),
             task.getErrorMessage(),
+            task.getProofreadRevisionId(),
+            task.getProofreadRawText(),
+            task.getProofreadOptimizedText(),
+            task.getProofreadMarkdownContent(),
             task.getCreatedAt(),
             task.getCompletedAt(),
             matches
