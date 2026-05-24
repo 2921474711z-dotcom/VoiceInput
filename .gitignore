@@ -9,6 +9,7 @@ target
 .env
 *.log
 *.tsbuildinfo
+docs/superpowers/
 backend/.mvn
 frontend/.vite
 frontend/dist
