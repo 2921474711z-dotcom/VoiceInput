@@ -56,6 +56,67 @@ public class PromptService {
         ).lines().collect(Collectors.joining("\n"));
     }
 
+    public String buildRetryPrompt(
+        SceneType sceneType,
+        AppConfigEntity config,
+        String rawText,
+        String correctedText,
+        OpenAiCompatibleClient.OptimizationResult optimizationResult,
+        SceneOutputValidator.ValidationResult validationResult
+    ) {
+        return """
+            你上一次生成的结果没有满足当前场景要求，请严格修正后重新输出 JSON。
+            当前场景：%s
+            上一次失败原因：%s
+            本次修正要求：%s
+
+            重新遵守以下场景约束：
+            场景要求：%s
+            输出约束：%s
+            优化目标：%s
+            语气风格：%s
+            长度偏好：%s
+            输出格式：%s
+            稳定性策略：%s
+
+            原始识别文本：
+            %s
+
+            已应用热词后的文本：
+            %s
+
+            上一次优化结果：
+            %s
+
+            上一次 Markdown：
+            %s
+
+            只允许重新返回 JSON：
+            {
+              "title": "简短标题",
+              "summary": "一句摘要",
+              "optimizedText": "优化后的正文",
+              "markdown": "Markdown 内容",
+              "improvement": "说明相对原文改善了什么"
+            }
+            """.formatted(
+            sceneLabel(sceneType),
+            validationResult.reason(),
+            validationResult.repairHint(),
+            sceneInstruction(sceneType),
+            outputConstraint(sceneType),
+            resolveOptimizationGoal(sceneType, config.getOptimizationGoal()),
+            config.getToneStyle(),
+            config.getLengthPreference(),
+            config.getOutputFormat(),
+            config.getStabilityMode(),
+            rawText,
+            correctedText,
+            optimizationResult.optimizedText(),
+            optimizationResult.markdown()
+        ).lines().collect(Collectors.joining("\n"));
+    }
+
     private String sceneLabel(SceneType sceneType) {
         return switch (sceneType) {
             case MEETING_MINUTES -> "会议纪要";
@@ -70,22 +131,22 @@ public class PromptService {
     private String sceneInstruction(SceneType sceneType) {
         return switch (sceneType) {
             case MEETING_MINUTES -> "按会议纪要格式输出，必须包含会议概述、核心结论、待办事项。";
-            case WORK_REPORT -> "按工作汇报格式输出，按点归纳工作进展、风险、下一步安排。";
+            case WORK_REPORT -> "按工作汇报格式输出，按点归纳当前进展、风险问题和下一步安排。";
             case FORMAL_EXPRESSION -> "输出为正式表达，减少口语化，保持严谨、精炼和完整。";
             case MARKDOWN_NOTE -> "输出必须是结构化 Markdown 笔记，适合直接保存到知识库。";
             case CODE_COMMENT -> "输出面向技术文档和代码注释，保留术语、英文缩写和关键技术名词。";
-            case CHAT_REPLY -> "输出简洁自然，适合直接发送给他人的即时聊天回复。";
+            case CHAT_REPLY -> "输出简洁自然，适合直接发送给他人的即时聊天回复，控制在 1 到 3 句。";
         };
     }
 
     private String outputConstraint(SceneType sceneType) {
         return switch (sceneType) {
             case MEETING_MINUTES -> "必须保留“会议概述 / 核心结论 / 待办事项”结构，不要写成聊天回复或技术注释。";
-            case WORK_REPORT -> "必须突出“进展 / 风险 / 下一步”，不要写成会议纪要。";
+            case WORK_REPORT -> "必须突出“当前进展 / 风险问题 / 下一步计划”，不要写成会议纪要。";
             case FORMAL_EXPRESSION -> "必须写成连贯正式文本，不要输出列表化会议纪要。";
             case MARKDOWN_NOTE -> "必须输出 Markdown 标题、二级标题或列表，不能只给纯段落。";
             case CODE_COMMENT -> "必须保留技术词汇和英文术语，不能为追求通顺而改写掉关键名词。";
-            case CHAT_REPLY -> "必须短、自然、像人发消息，不能输出纪要、报告或 Markdown 大纲。";
+            case CHAT_REPLY -> "必须短、自然、像人发消息，控制在 1 到 3 句，禁止标题，禁止列表，不能输出纪要、报告或 Markdown 大纲。";
         };
     }
 

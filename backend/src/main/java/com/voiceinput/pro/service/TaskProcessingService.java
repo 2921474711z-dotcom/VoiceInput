@@ -29,6 +29,8 @@ public class TaskProcessingService {
     private final OpenAiCompatibleClient openAiCompatibleClient;
     private final PromptService promptService;
     private final ConfigService configService;
+    private final SceneOutputValidator sceneOutputValidator;
+    private final SceneOutputFormatter sceneOutputFormatter;
     private final JsonSupport jsonSupport;
     private final AppProperties appProperties;
 
@@ -62,10 +64,39 @@ public class TaskProcessingService {
 
             String prompt = promptService.buildOptimizationPrompt(task.getSceneType(), executionConfig, rawText, hotwordResult.text());
             var optimized = openAiCompatibleClient.optimize(prompt, executionConfig);
+            SceneOutputValidator.ValidationResult validationResult = sceneOutputValidator.validate(
+                task.getSceneType(),
+                optimized.optimizedText(),
+                optimized.markdown()
+            );
+            if (!validationResult.passed()) {
+                String retryPrompt = promptService.buildRetryPrompt(
+                    task.getSceneType(),
+                    executionConfig,
+                    rawText,
+                    hotwordResult.text(),
+                    optimized,
+                    validationResult
+                );
+                optimized = openAiCompatibleClient.optimize(retryPrompt, executionConfig);
+                validationResult = sceneOutputValidator.validate(
+                    task.getSceneType(),
+                    optimized.optimizedText(),
+                    optimized.markdown()
+                );
+                if (!validationResult.passed()) {
+                    throw new IllegalStateException("场景输出校验失败：" + validationResult.reason());
+                }
+            }
+            SceneOutputFormatter.FormattedOutput formattedOutput = sceneOutputFormatter.format(
+                task.getSceneType(),
+                optimized.optimizedText(),
+                optimized.markdown()
+            );
 
             task.setRawText(rawText);
-            task.setOptimizedText(TextSupport.normalizeWhitespace(optimized.optimizedText()));
-            task.setMarkdownContent(TextSupport.normalizeWhitespace(optimized.markdown()));
+            task.setOptimizedText(formattedOutput.optimizedText());
+            task.setMarkdownContent(formattedOutput.markdown());
             task.setTitle(optimized.title());
             task.setSummary(optimized.summary());
             task.setStatus(TaskStatus.SUCCESS);
