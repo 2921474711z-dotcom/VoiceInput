@@ -1,0 +1,17 @@
+node_modules
+dist
+build
+.idea
+.vscode
+.npm-cache
+.tmp
+target
+.env
+*.log
+*.tsbuildinfo
+backend/.mvn
+frontend/.vite
+frontend/dist
+backend/target
+uploads
+tmp

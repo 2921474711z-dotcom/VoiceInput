@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+
+  redis:
+    image: redis:7.2
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-03T21-03-04Z
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.runtime
+    volumes:
+      - E:/DockerData/VoiceInputPro/uploads:/app/data/uploads
+      - E:/DockerData/VoiceInputPro/exports:/app/data/exports
+      - E:/DockerData/VoiceInputPro/logs:/app/logs
+      - E:/maven-repository:/m2:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.runtime

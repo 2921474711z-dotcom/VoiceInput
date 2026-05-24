@@ -1,0 +1,10 @@
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+COPY target/classes/ /app/classes/
+COPY target/runtime-classpath.txt /app/runtime-classpath.txt
+COPY docker/local-entrypoint.sh /app/local-entrypoint.sh
+RUN mkdir -p /app/data/uploads /app/data/exports /app/logs
+RUN chmod +x /app/local-entrypoint.sh
+EXPOSE 8080
+ENTRYPOINT ["/app/local-entrypoint.sh"]

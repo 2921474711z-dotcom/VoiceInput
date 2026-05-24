@@ -1,0 +1,112 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: voiceinput-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - E:/DockerData/VoiceInputPro/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: voiceinput-redis
+    ports:
+      - "${REDIS_PORT}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - E:/DockerData/VoiceInputPro/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+    container_name: voiceinput-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - E:/DockerData/VoiceInputPro/minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voiceinput-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true -Dsun.net.inetaddr.ttl=300 -Dsun.net.inetaddr.negative.ttl=1
+      SPRING_SERVER_PORT: ${SPRING_SERVER_PORT}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_DATA_REDIS_HOST: ${SPRING_DATA_REDIS_HOST}
+      SPRING_DATA_REDIS_PORT: ${SPRING_DATA_REDIS_PORT}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      APP_BASE_URL: ${APP_BASE_URL}
+      ASR_PROVIDER: ${ASR_PROVIDER}
+      ASR_BASE_URL: ${ASR_BASE_URL}
+      ASR_API_KEY: ${ASR_API_KEY}
+      ASR_MODEL: ${ASR_MODEL}
+      LLM_PROVIDER: ${LLM_PROVIDER}
+      LLM_BASE_URL: ${LLM_BASE_URL}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL}
+      MODEL_TIMEOUT_SECONDS: ${MODEL_TIMEOUT_SECONDS}
+      MODEL_MAX_RETRIES: ${MODEL_MAX_RETRIES}
+      ASR_PRICE_PER_MINUTE: ${ASR_PRICE_PER_MINUTE}
+      LLM_INPUT_PRICE_PER_1K: ${LLM_INPUT_PRICE_PER_1K}
+      LLM_OUTPUT_PRICE_PER_1K: ${LLM_OUTPUT_PRICE_PER_1K}
+      QUEUE_NAME: ${QUEUE_NAME}
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
+      - 1.1.1.1
+    ports:
+      - "8080:8080"
+    volumes:
+      - E:/DockerData/VoiceInputPro/uploads:/app/data/uploads
+      - E:/DockerData/VoiceInputPro/exports:/app/data/exports
+      - E:/DockerData/VoiceInputPro/logs:/app/logs
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8080/api
+    container_name: voiceinput-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${VITE_PORT}:80"

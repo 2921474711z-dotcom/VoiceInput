@@ -1,0 +1,63 @@
+server:
+  port: ${SPRING_SERVER_PORT:8080}
+
+spring:
+  application:
+    name: voiceinput-pro
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/voiceinput_pro}
+    username: ${SPRING_DATASOURCE_USERNAME:voiceinput}
+    password: ${SPRING_DATASOURCE_PASSWORD:voiceinput123}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      repositories:
+        enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  base-url: ${APP_BASE_URL:http://localhost}
+  queue-name: ${QUEUE_NAME:voiceinput:tasks}
+  storage:
+    bucket: ${MINIO_BUCKET:voiceinput-pro}
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ROOT_USER:minioadmin}
+    secret-key: ${MINIO_ROOT_PASSWORD:minioadmin123}
+  llm:
+    provider: ${LLM_PROVIDER:openai-compatible}
+    base-url: ${LLM_BASE_URL:https://api.openai.com}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:gpt-4.1-mini}
+  asr:
+    provider: ${ASR_PROVIDER:openai-compatible}
+    base-url: ${ASR_BASE_URL:https://api.openai.com}
+    api-key: ${ASR_API_KEY:}
+    model: ${ASR_MODEL:gpt-4o-mini-transcribe}
+  model:
+    timeout-seconds: ${MODEL_TIMEOUT_SECONDS:120}
+    max-retries: ${MODEL_MAX_RETRIES:2}
+  pricing:
+    asr-price-per-minute: ${ASR_PRICE_PER_MINUTE:0.006}
+    llm-input-price-per-1k: ${LLM_INPUT_PRICE_PER_1K:0.0008}
+    llm-output-price-per-1k: ${LLM_OUTPUT_PRICE_PER_1K:0.0032}
