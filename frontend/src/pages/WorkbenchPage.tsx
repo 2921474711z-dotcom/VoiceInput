@@ -1,8 +1,8 @@
-import { Copy, Download, Edit3, Eraser, FileDown, Mic, RefreshCcw, Save, Square } from "lucide-react";
+import { Copy, Edit3, Eraser, FileDown, Mic, RefreshCcw, Save, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../components/ToastProvider";
 import { prepareAudioUpload } from "../services/audio";
-import { createExport, createTask, createTextTask, getExportDownloadUrl, getMarkdownDownloadUrl, getTaskDetail, getTemplates, reoptimizeTask, saveProofread, saveTaskToHistory, uploadAudio } from "../services/api";
+import { createExport, createTask, createTextTask, getExportDownloadUrl, getTaskDetail, getTemplates, reoptimizeTask, saveProofread, saveTaskToHistory, uploadAudio } from "../services/api";
 import { downloadFileFromUrl } from "../services/download";
 import {
   buildRecordingFile,
@@ -397,7 +397,7 @@ export function WorkbenchPage() {
       await saveProofread(task.id, {
         rawText: proofreadRaw,
         optimizedText: proofreadOptimized,
-        markdownContent: proofreadMarkdown
+        markdownContent: ""
       });
       const detail = await getTaskDetail(task.id);
       setTask(detail);
@@ -453,30 +453,6 @@ export function WorkbenchPage() {
     setTask(null);
     setMessage("当前工作台已清空");
     toast.info("已清空", "上传记录和处理结果已重置");
-  }
-
-  async function handleDownloadMarkdown() {
-    if (!task) {
-      toast.info("暂无可导出的内容", "先完成一次处理");
-      return;
-    }
-    try {
-      const response = await fetch(getMarkdownDownloadUrl(task.id));
-      if (!response.ok) {
-        throw new Error("导出请求失败");
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${task.title ?? task.fileName ?? "result"}.md`;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success("导出成功", "Markdown 文件已开始下载");
-    } catch (error) {
-      console.error(error);
-      toast.error("导出失败", error instanceof Error ? error.message : "请稍后重试");
-    }
   }
 
   return (
@@ -632,12 +608,12 @@ export function WorkbenchPage() {
           <div className="panel text-panel">
             <div className="panel-title-row">
               <h3 className="panel-title">优化后文本</h3>
-              <button className="inline-action" type="button" onClick={() => handleCopy(task?.optimizedText, "优化后文本")}>
+              <button className="inline-action" type="button" onClick={() => handleCopy(task?.proofreadOptimizedText || task?.optimizedText, "优化后文本")}>
                 <Copy size={14} />
                 复制优化文
               </button>
             </div>
-            <div className="text-view">{task?.optimizedText || "处理完成后，这里显示模板整理后的结果。"}</div>
+            <div className="text-view">{task?.proofreadOptimizedText || task?.optimizedText || "处理完成后，这里显示模板整理后的结果。"}</div>
             <div className="text-meta">
               {task ? `结果模板：${task.templateName ?? "未命名模板"}` : "模板会影响模型、风格、输出结构和热词修正。"}
             </div>
@@ -649,10 +625,6 @@ export function WorkbenchPage() {
               <button className="secondary-button" type="button" onClick={handleSaveHistory} disabled={!task}>
                 <Save size={16} />
                 保存到历史
-              </button>
-              <button className="primary-link-button" type="button" onClick={handleDownloadMarkdown}>
-                <Download size={16} />
-                导出 Markdown
               </button>
             </div>
             <div className="proofread-panel">
@@ -673,16 +645,8 @@ export function WorkbenchPage() {
               {proofreadOpen && task ? (
                 <div className="proofread-editor">
                   <label>
-                    校对原始文本
-                    <textarea className="text-input textarea-input" value={proofreadRaw} onChange={(event) => setProofreadRaw(event.target.value)} />
-                  </label>
-                  <label>
                     校对优化文本
                     <textarea className="text-input textarea-input" value={proofreadOptimized} onChange={(event) => setProofreadOptimized(event.target.value)} />
-                  </label>
-                  <label>
-                    校对 Markdown
-                    <textarea className="text-input textarea-input" value={proofreadMarkdown} onChange={(event) => setProofreadMarkdown(event.target.value)} />
                   </label>
                   <button className="primary-button" type="button" onClick={handleSaveProofread}>
                     <Save size={16} />

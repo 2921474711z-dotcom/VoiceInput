@@ -158,7 +158,7 @@ export function HistoryPage() {
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(detail?.optimizedText ?? "");
+      await navigator.clipboard.writeText(detail?.proofreadOptimizedText || detail?.optimizedText || "");
       toast.success("复制成功", "优化后文本已写入剪贴板");
     } catch (error) {
       console.error(error);
@@ -181,11 +181,10 @@ export function HistoryPage() {
       const result = await saveProofread(detail.id, {
         rawText: proofreadRaw,
         optimizedText: proofreadOptimized,
-        markdownContent: proofreadMarkdown
+        markdownContent: ""
       });
       const fresh = await getHistoryDetail(detail.id);
       setDetail(fresh);
-      setExportSource("PROOFREAD");
       toast.success("人工校对已保存", `校对版本：${result.proofreadRevisionId}`);
     } catch (error) {
       console.error(error);
@@ -201,7 +200,7 @@ export function HistoryPage() {
       const record = await createExport({
         taskId: detail.id,
         exportType,
-        contentSource: exportSource
+        contentSource: detail.proofreadRevisionId ? "PROOFREAD" : "MODEL"
       });
       await downloadFileFromUrl(getExportDownloadUrl(record.id), record.fileName);
       toast.success("导出已生成", `${record.fileName} 已写入导出中心`);
@@ -421,16 +420,8 @@ export function HistoryPage() {
               {proofreadOpen ? (
                 <div className="proofread-editor">
                   <label>
-                    校对原始文本
-                    <textarea className="text-input textarea-input" value={proofreadRaw} onChange={(event) => setProofreadRaw(event.target.value)} />
-                  </label>
-                  <label>
                     校对优化文本
                     <textarea className="text-input textarea-input" value={proofreadOptimized} onChange={(event) => setProofreadOptimized(event.target.value)} />
-                  </label>
-                  <label>
-                    校对 Markdown
-                    <textarea className="text-input textarea-input" value={proofreadMarkdown} onChange={(event) => setProofreadMarkdown(event.target.value)} />
                   </label>
                   <button className="primary-button" type="button" onClick={handleSaveProofread}>
                     <Save size={16} />
@@ -446,10 +437,6 @@ export function HistoryPage() {
                 <option value="TXT">TXT</option>
                 <option value="JSON">JSON</option>
               </select>
-              <select className="select-input" value={exportSource} onChange={(event) => setExportSource(event.target.value as ExportContentSource)}>
-                <option value="MODEL">模型输出版</option>
-                <option value="PROOFREAD" disabled={!detail.proofreadRevisionId}>人工校对版</option>
-              </select>
               <button className="primary-link-button" type="button" onClick={handleCreateExport}>
                 <FileDown size={16} />
                 生成导出
@@ -463,10 +450,6 @@ export function HistoryPage() {
               <button className="secondary-button" type="button" onClick={handleReoptimize}>
                 <RefreshCcw size={16} />
                 再次处理
-              </button>
-              <button className="secondary-link-button" type="button" onClick={handleDownloadMarkdown}>
-                <Download size={16} />
-                转 Markdown
               </button>
               <button className="danger-button" type="button" onClick={handleDelete}>
                 <Trash2 size={16} />
