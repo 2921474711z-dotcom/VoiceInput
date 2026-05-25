@@ -5,6 +5,7 @@ build
 .vscode
 .npm-cache
 .tmp
+.vendor
 target
 .env
 *.log
