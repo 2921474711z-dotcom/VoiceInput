@@ -1,0 +1,10 @@
+target/*
+!target/classes/
+!target/classes/**
+!target/dependency/
+!target/dependency/**
+.git
+.idea
+*.log
+data
+logs

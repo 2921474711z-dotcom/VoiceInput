@@ -12,10 +12,12 @@ import com.voiceinput.pro.model.enums.TaskStatus;
 import com.voiceinput.pro.repository.ExportRecordRepository;
 import com.voiceinput.pro.repository.ProcessingTaskRepository;
 import com.voiceinput.pro.support.JsonSupport;
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,8 +43,10 @@ class ExportServiceTest {
     @Test
     void createDocxExportShouldPersistMinioBackedRecord() {
         ProcessingTaskEntity task = successfulTask();
+        byte[][] exportedBytes = new byte[1][];
         when(processingTaskRepository.findByIdAndDeletedFalse("task-1")).thenReturn(Optional.of(task));
         when(storageService.saveExport(any(), any(), any(), any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+            exportedBytes[0] = invocation.getArgument(3);
             ExportRecordEntity record = new ExportRecordEntity();
             record.setId("export-1");
             record.setTaskId(invocation.getArgument(0));
@@ -66,6 +70,11 @@ class ExportServiceTest {
         assertThat(response.contentSource()).isEqualTo("PROOFREAD");
         assertThat(response.fileName()).endsWith(".docx");
         assertThat(response.sizeBytes()).isGreaterThan(0);
+        assertThat(readDocxText(exportedBytes[0]))
+            .contains("人工校对后的会议纪要")
+            .doesNotContain("原始识别文本")
+            .doesNotContain("Markdown 内容")
+            .doesNotContain("原始识别内容");
     }
 
     @Test
@@ -113,5 +122,16 @@ class ExportServiceTest {
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         return task;
+    }
+
+    private String readDocxText(byte[] bytes) {
+        try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(bytes))) {
+            return document.getParagraphs().stream()
+                .map(paragraph -> paragraph.getText() == null ? "" : paragraph.getText())
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
+        } catch (Exception ex) {
+            throw new AssertionError("读取 DOCX 测试内容失败", ex);
+        }
     }
 }

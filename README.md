@@ -119,6 +119,11 @@ Copy-Item .env.example .env
 docker compose up -d --build
 ```
 
+补充说明：
+- 第一次执行时仍然可能下载 Maven 和 npm 依赖，这属于正常现象。
+- 当前默认 `Dockerfile` 已启用 BuildKit 缓存挂载，后续重复构建会复用容器内 Maven 与 npm 缓存，不会每次都从零开始下载。
+- 默认交付方式不依赖宿主机的 `E:\maven-repository`，这样别人拿到项目后也能直接按 README 拉起。
+
 这条命令会自动完成：
 
 - 构建前端镜像

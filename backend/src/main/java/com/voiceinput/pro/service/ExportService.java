@@ -115,6 +115,10 @@ public class ExportService {
             addSection(document, "原始识别文本", content.rawText());
             addSection(document, "Markdown 内容", content.markdown());
 
+            while (document.getBodyElements().size() > 1) {
+                document.removeBodyElement(1);
+            }
+            addBody(document, content.optimizedText());
             document.write(outputStream);
             return outputStream.toByteArray();
         } catch (Exception ex) {
@@ -129,6 +133,16 @@ public class ExportService {
         headingRun.setFontSize(13);
         headingRun.setText(heading);
 
+        String[] lines = valueOrBlank(body).split("\\R", -1);
+        for (String line : lines) {
+            XWPFParagraph paragraph = document.createParagraph();
+            XWPFRun run = paragraph.createRun();
+            run.setFontSize(11);
+            run.setText(line);
+        }
+    }
+
+    private void addBody(XWPFDocument document, String body) {
         String[] lines = valueOrBlank(body).split("\\R", -1);
         for (String line : lines) {
             XWPFParagraph paragraph = document.createParagraph();

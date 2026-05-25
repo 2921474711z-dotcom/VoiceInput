@@ -16,7 +16,6 @@ services:
       - E:/DockerData/VoiceInputPro/uploads:/app/data/uploads
       - E:/DockerData/VoiceInputPro/exports:/app/data/exports
       - E:/DockerData/VoiceInputPro/logs:/app/logs
-      - E:/maven-repository:/m2:ro
 
   frontend:
     build:
